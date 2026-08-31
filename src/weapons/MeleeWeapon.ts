@@ -1,4 +1,5 @@
-import Phaser from "phaser";
+﻿import Phaser from "phaser";
+import Zombie from "../enemies/Zombie";
 
 export default class MeleeWeapon {
     private scene: Phaser.Scene;
@@ -12,41 +13,51 @@ export default class MeleeWeapon {
         this.scene = scene;
     }
 
-    public attack(playerX: number, playerY: number, pointer: Phaser.Input.Pointer) {
+    public attack(playerX: number, chestY: number, pointer: Phaser.Input.Pointer, backpack?: any, isCombo: boolean = false): boolean {
         const currentTime = this.scene.time.now;
-        if (currentTime - this.lastAttackTime < this.attackCooldown) return;
+        if (currentTime - this.lastAttackTime < this.attackCooldown) return false;
+
+        // ⚡ Checks 7 Stamina (Clicking) or 12 Stamina (Holding)
+        if (backpack && !backpack.consumeMeleeStamina(isHolding)) {
+            return false;
+        }
 
         this.lastAttackTime = currentTime;
 
-        // 1. Get Mouse World Coordinates in Phaser 3
-        const worldX = pointer.worldX;
-        const worldY = pointer.worldY;
+        const angle = Phaser.Math.Angle.Between(playerX, chestY, pointer.worldX, pointer.worldY);
+        const reachDistance = 54;
+        const hitboxX = playerX + Math.cos(angle) * reachDistance;
+        const hitboxY = chestY + Math.sin(angle) * reachDistance;
 
-        // 2. Calculate Angle towards Mouse
-        const angle = Phaser.Math.Angle.Between(playerX, playerY, worldX, worldY);
-        const directionX = Math.cos(angle);
-        const directionY = Math.sin(angle);
-
-        // 3. Position the Attack Hitbox in front of player towards mouse
-        const reachDistance = 28;
-        const hitboxX = playerX + directionX * reachDistance;
-        const hitboxY = playerY + directionY * reachDistance;
-
-        // 4. Create visual slash shape
-        const hitbox = this.scene.add.rectangle(hitboxX, hitboxY, 32, 16, 0xff3333, 0.7);
+        const hitbox = this.scene.add.rectangle(hitboxX, hitboxY, 56, 32, 0xff3333, 0.5);
         hitbox.setRotation(angle);
+        hitbox.setDepth(hitboxY);
 
-        // Enable physics on hitbox
-        this.scene.physics.add.existing(hitbox);
-        const body = hitbox.body as Phaser.Physics.Arcade.Body;
-        body.setAllowGravity(false);
+        const mainScene = this.scene as any;
+        if (mainScene.waveManager) {
+            const activeZombies: Zombie[] = mainScene.waveManager.getActiveZombies();
+            const hitBounds = hitbox.getBounds();
 
-        // 5. Destroy hitbox after 100ms swing duration
-        this.scene.time.delayedCall(100, () => {
+            activeZombies.forEach((zombie) => {
+                if (zombie.active && Phaser.Geom.Intersects.RectangleToRectangle(hitBounds, zombie.getBounds())) {
+                    const knockbackDir = new Phaser.Math.Vector2(
+                        zombie.x - playerX,
+                        zombie.y - chestY
+                    ).normalize();
+
+                    if (mainScene.triggerHitStop) mainScene.triggerHitStop(50);
+                    this.scene.cameras.main.shake(80, 0.004);
+
+                    zombie.takeDamage(this.damage, knockbackDir, this.knockbackForce, "MELEE");
+                }
+            });
+        }
+
+        this.scene.time.delayedCall(80, () => {
             hitbox.destroy();
         });
 
-        // 6. Camera micro-shake on swing
-        this.scene.cameras.main.shake(60, 0.002);
+        this.scene.cameras.main.shake(50, 0.002);
+        return true;
     }
 }

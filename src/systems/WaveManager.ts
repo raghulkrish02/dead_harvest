@@ -1,4 +1,4 @@
-import Phaser from "phaser";
+﻿import Phaser from "phaser";
 import Zombie from "../enemies/Zombie";
 import { FenceManager } from "../world/Fence";
 
@@ -23,6 +23,12 @@ export default class WaveManager {
     private waveConfigs: WaveConfig[] = [];
     private spawnTimerEvent?: Phaser.Time.TimerEvent;
 
+    private brutesSpawnedThisWave: number = 0;
+    private currentWaveConfig!: WaveConfig;
+
+    public activeBoss?: Zombie;
+    private bossSpawnedThisWave: boolean = false;
+
     constructor(scene: Phaser.Scene) {
         this.scene = scene;
 
@@ -30,14 +36,32 @@ export default class WaveManager {
         this.scene.physics.add.collider(this.zombieGroup, this.zombieGroup);
 
         const mainScene = this.scene as any;
+
         if (mainScene.player) {
             this.scene.physics.add.collider(mainScene.player, this.zombieGroup);
         }
         if (mainScene.world && mainScene.world.treeBottomGroup) {
             this.scene.physics.add.collider(this.zombieGroup, mainScene.world.treeBottomGroup);
         }
+        if (mainScene.world && mainScene.world.rockGroup) {
+            this.scene.physics.add.collider(this.zombieGroup, mainScene.world.rockGroup);
+        }
+
+        // Direct Fence Collision & Attack Callback
         if (mainScene.fenceManager && mainScene.fenceManager.fenceGroup) {
-            this.scene.physics.add.collider(this.zombieGroup, mainScene.fenceManager.fenceGroup);
+            this.scene.physics.add.collider(
+                this.zombieGroup,
+                mainScene.fenceManager.fenceGroup,
+                (zombieObj, fenceObj) => {
+                    const zombie = zombieObj as Zombie;
+                    const fenceSprite = fenceObj as Phaser.GameObjects.Sprite;
+                    const fenceData = fenceSprite.getData("fenceData");
+
+                    if (zombie && zombie.active && fenceData && fenceData.state === "INTACT") {
+                        zombie.attackFence(fenceData, mainScene.fenceManager, mainScene.player.x, mainScene.player.y);
+                    }
+                }
+            );
         }
 
         this.initWaveConfigs();
@@ -45,12 +69,12 @@ export default class WaveManager {
 
     private initWaveConfigs() {
         this.waveConfigs = [
-            { waveNumber: 1, totalZombies: 5, spawnIntervalMs: 2000, runnerRatio: 0.0, bruteCount: 0 },
-            { waveNumber: 2, totalZombies: 8, spawnIntervalMs: 1800, runnerRatio: 0.2, bruteCount: 0 },
-            { waveNumber: 3, totalZombies: 12, spawnIntervalMs: 1500, runnerRatio: 0.3, bruteCount: 1 },
-            { waveNumber: 4, totalZombies: 18, spawnIntervalMs: 1200, runnerRatio: 0.4, bruteCount: 2 },
-            { waveNumber: 5, totalZombies: 25, spawnIntervalMs: 1000, runnerRatio: 0.5, bruteCount: 3, bossType: "TITAN" },
-        ];
+        { waveNumber: 1, totalZombies: 6,  spawnIntervalMs: 1800, runnerRatio: 0.0, bruteCount: 0 },
+        { waveNumber: 2, totalZombies: 10, spawnIntervalMs: 1600, runnerRatio: 0.2, bruteCount: 0 },
+        { waveNumber: 3, totalZombies: 15, spawnIntervalMs: 1300, runnerRatio: 0.3, bruteCount: 1 }, // 🔥 Brute forces ranged!
+        { waveNumber: 4, totalZombies: 22, spawnIntervalMs: 1100, runnerRatio: 0.4, bruteCount: 2 },
+        { waveNumber: 5, totalZombies: 30, spawnIntervalMs: 950,  runnerRatio: 0.4, bruteCount: 3, bossType: "TITAN" },
+    ];
     }
 
     public getActiveZombies(): Zombie[] {
@@ -69,25 +93,29 @@ export default class WaveManager {
         this.currentWave++;
         this.isWaveActive = true;
         this.wasWaveDefeated = false;
+        this.brutesSpawnedThisWave = 0;
+        this.bossSpawnedThisWave = false;
+        this.activeBoss = undefined;
 
-        const config = this.waveConfigs.find(w => w.waveNumber === this.currentWave) || {
+        this.currentWaveConfig = this.waveConfigs.find(w => w.waveNumber === this.currentWave) || {
             waveNumber: this.currentWave,
             totalZombies: 10 + (this.currentWave * 4),
             spawnIntervalMs: Math.max(500, 2000 - (this.currentWave * 100)),
-            runnerRatio: Math.min(0.8, 0.1 * this.currentWave),
+            runnerRatio: Math.min(0.7, 0.15 * this.currentWave),
             bruteCount: Math.floor(this.currentWave / 2)
         };
 
-        this.totalZombiesInWave = config.totalZombies;
+        this.totalZombiesInWave = this.currentWaveConfig.totalZombies;
         this.zombiesSpawnedCount = 0;
 
+        // Spawn first minion
         this.zombiesSpawnedCount++;
         this.spawnOffScreenZombie(playerX, playerY);
 
-        if (config.totalZombies > 1) {
+        if (this.currentWaveConfig.totalZombies > 1) {
             this.spawnTimerEvent = this.scene.time.addEvent({
-                delay: config.spawnIntervalMs,
-                repeat: config.totalZombies - 2,
+                delay: this.currentWaveConfig.spawnIntervalMs,
+                repeat: this.currentWaveConfig.totalZombies - 2,
                 callback: () => {
                     this.zombiesSpawnedCount++;
                     this.spawnOffScreenZombie(playerX, playerY);
@@ -106,24 +134,103 @@ export default class WaveManager {
         spawnX = Phaser.Math.Clamp(spawnX, 128, 3072);
         spawnY = Phaser.Math.Clamp(spawnY, 128, 3072);
 
-        const zombie = new Zombie(this.scene, spawnX, spawnY);
+        let selectedType: "WALKER" | "RUNNER" | "BRUTE" | "TITAN" = "WALKER";
+
+        // 👑 1. DYNAMIC LIVE-TRACKING METEOR DROP FOR ROTTING TITAN!
+        if (this.currentWaveConfig.bossType === "TITAN" && !this.bossSpawnedThisWave && this.zombiesSpawnedCount >= 5) {
+            this.bossSpawnedThisWave = true;
+            const mainScene = this.scene as any;
+
+            // 🌑 Telegraph Warning & Siren
+            mainScene.cameras.main.shake(120, 0.005);
+            mainScene.showFloatingText?.(playerX, playerY - 110, "👑 THE ROTTING TITAN DESCENDS!", "#ff3333", 2500);
+
+            let targetLandingX = playerX + (mainScene.player?.flipX ? -120 : 120);
+            let targetLandingY = playerY - 20;
+
+            const meteorShadow = this.scene.add.circle(targetLandingX, targetLandingY, 20, 0xff0000, 0.5);
+            meteorShadow.setStrokeStyle(3, 0xffaa00).setDepth(15000);
+
+            // 🎯 Phase A: Track Player's Live Position for 650ms
+            const trackingTimer = this.scene.time.addEvent({
+                delay: 16,
+                repeat: 40, // 40 * 16ms = ~640ms of active tracking
+                callback: () => {
+                    if (!mainScene.player || !meteorShadow.active) return;
+                    const p = mainScene.player;
+                    const leadX = p.flipX ? -110 : 110;
+                    targetLandingX = Phaser.Math.Clamp(p.x + leadX, 200, 2872);
+                    targetLandingY = Phaser.Math.Clamp(p.y - 20, 200, 2872);
+                    meteorShadow.setPosition(targetLandingX, targetLandingY);
+                }
+            });
+
+            // 🎯 Phase B: Expand shadow and lock target for impact
+            this.scene.tweens.add({
+                targets: meteorShadow,
+                radius: 100,
+                alpha: 0.85,
+                duration: 1000,
+                ease: "Cubic.easeOut",
+                onComplete: () => {
+                    trackingTimer.remove();
+                    meteorShadow.destroy();
+
+                    // 💥 METEOR IMPACT CRASH AT THE LOCKED LIVE SPOT!
+                    const titan = new Zombie(this.scene, targetLandingX, targetLandingY, "TITAN");
+                    this.zombieGroup.add(titan);
+                    this.activeBoss = titan;
+
+                    // Huge Impact VFX & Camera Shudder
+                    this.scene.cameras.main.shake(300, 0.02);
+
+                    const impactRing = this.scene.add.circle(targetLandingX, targetLandingY, 100, 0xff3300, 0.7);
+                    impactRing.setStrokeStyle(4, 0xffff00).setDepth(15000);
+                    this.scene.tweens.add({
+                        targets: impactRing,
+                        scale: 1.4,
+                        alpha: 0,
+                        duration: 400,
+                        onComplete: () => impactRing.destroy()
+                    });
+
+                    // ⚡ 8 Unavoidable Shockwave Tremor Damage
+                    if (mainScene.player) {
+                        mainScene.player.takeDamage(8);
+                        const knockDir = new Phaser.Math.Vector2(mainScene.player.x - targetLandingX, mainScene.player.y - targetLandingY).normalize();
+                        mainScene.player.applyKnockback(knockDir.x, knockDir.y, 250, 150);
+                    }
+                }
+            });
+            return;
+        } else {
+            const remainingSpawns = this.totalZombiesInWave - this.zombiesSpawnedCount;
+            const remainingBrutesNeeded = this.currentWaveConfig.bruteCount - this.brutesSpawnedThisWave;
+
+            if (remainingBrutesNeeded > 0 && (Math.random() < 0.35 || remainingSpawns <= remainingBrutesNeeded)) {
+                selectedType = "BRUTE";
+                this.brutesSpawnedThisWave++;
+            } else if (Math.random() < this.currentWaveConfig.runnerRatio) {
+                selectedType = "RUNNER";
+            }
+        }
+
+        const zombie = new Zombie(this.scene, spawnX, spawnY, selectedType);
         this.zombieGroup.add(zombie);
+
+        if (selectedType === "TITAN") {
+            this.activeBoss = zombie;
+        }
     }
 
-    public updateWaves(playerX: number, playerY: number, fenceManager: FenceManager) {
+    public updateWaves(playerX: number, playerY: number, _fenceManager: FenceManager) {
         if (!this.isWaveActive) return;
 
         const activeZombies = this.getActiveZombies();
 
         activeZombies.forEach((zombie) => {
-            const fence = fenceManager.getFenceAtWorldPos(zombie.x, zombie.y);
-
-            if (fence && fence.state === "INTACT") {
-                zombie.setVelocity(0, 0);
-                fenceManager.damageFence(fence.gridX, fence.gridY, 0.5);
-            } else {
-                zombie.update(playerX, playerY);
-            }
+            if (!zombie.active || zombie.isKnockedBack) return;
+            zombie.update(playerX, playerY);
         });
 
         if (this.zombiesSpawnedCount >= this.totalZombiesInWave && activeZombies.length === 0) {
@@ -133,7 +240,6 @@ export default class WaveManager {
         }
     }
 
-    // Called on Surrender: Rewinds currentWave by 1 so startNextWave() retries the EXACT failed wave!
     public onWaveFailed() {
         if (this.spawnTimerEvent) {
             this.spawnTimerEvent.remove();

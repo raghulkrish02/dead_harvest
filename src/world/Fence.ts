@@ -42,24 +42,10 @@ export class FenceManager {
         const key = `${gridX},${gridY}`;
 
         const existing = this.fenceMap.get(key);
-        if (existing && existing.state === "INTACT") return false;
+        if (existing) return false;
 
         const snappedX = gridX * 40 + 20;
         const snappedY = gridY * 40 + 20;
-
-        if (existing && existing.state === "BROKEN") {
-            existing.state = "INTACT";
-            existing.hp = existing.maxHp;
-            existing.sprite.setTint(0x8b5a2b);
-            existing.sprite.setAlpha(1.0);
-
-            // Re-enable solid physics collision!
-            if (existing.sprite.body) {
-                existing.sprite.body.enable = true;
-                (existing.sprite.body as Phaser.Physics.Arcade.StaticBody).updateFromGameObject();
-            }
-            return true;
-        }
 
         const sprite = this.scene.add.sprite(snappedX, snappedY, "stump");
         sprite.setOrigin(0.5, 0.5);
@@ -67,7 +53,6 @@ export class FenceManager {
         sprite.setDepth(snappedY);
         sprite.setTint(0x8b5a2b);
 
-        // Enable solid Arcade Physics static body on fence
         this.scene.physics.add.existing(sprite, true);
         const body = sprite.body as Phaser.Physics.Arcade.StaticBody;
         body.setSize(36, 36);
@@ -86,6 +71,9 @@ export class FenceManager {
             sprite
         };
 
+        // Attach fenceData to sprite for direct collider callback access
+        sprite.setData("fenceData", fenceData);
+
         this.fenceMap.set(key, fenceData);
         return true;
     }
@@ -96,15 +84,28 @@ export class FenceManager {
         const key = `${gridX},${gridY}`;
 
         const fence = this.fenceMap.get(key);
-        if (!fence) return false;
+        // BLOCK removing broken ruins: Only INTACT working fences can be dismantled!
+        if (!fence || fence.state === "BROKEN") return false;
 
-        // Remove solid physics collision
         if (fence.sprite.body) {
             this.fenceGroup.remove(fence.sprite);
         }
         fence.sprite.destroy();
         this.fenceMap.delete(key);
         return true;
+    }
+
+    public getNearbyIntactFence(worldX: number, worldY: number, reach: number = 36): IFenceData | null {
+        for (const [_, fence] of this.fenceMap) {
+            if (fence.state === "INTACT") {
+                const fenceCenterX = fence.gridX * 40 + 20;
+                const fenceCenterY = fence.gridY * 40 + 20;
+                if (Phaser.Math.Distance.Between(worldX, worldY, fenceCenterX, fenceCenterY) <= reach) {
+                    return fence;
+                }
+            }
+        }
+        return null;
     }
 
     public getFenceAtWorldPos(worldX: number, worldY: number): IFenceData | undefined {
@@ -120,26 +121,51 @@ export class FenceManager {
 
         fence.hp -= damage;
         
+        // Visual hit flash
         this.scene.tweens.add({
             targets: fence.sprite,
-            alpha: 0.4,
+            alpha: 0.3,
             duration: 60,
             yoyo: true
         });
 
-        // When destroyed: Disable solid collision so entities walk over ruins!
+        // Floating damage indicator on fence
+        const fenceWorldX = fence.gridX * 40 + 20;
+        const fenceWorldY = fence.gridY * 40 + 20;
+        const dmgText = this.scene.add.text(
+            fenceWorldX + Phaser.Math.Between(-6, 6),
+            fenceWorldY - 10,
+            `-${damage}`,
+            {
+                fontFamily: "Arial",
+                fontSize: "11px",
+                color: "#ffaa00",
+                stroke: "#000000",
+                strokeThickness: 3
+            }
+        ).setOrigin(0.5).setDepth(20000);
+
+        this.scene.tweens.add({
+            targets: dmgText,
+            y: dmgText.y - 16,
+            alpha: 0,
+            duration: 400,
+            onComplete: () => dmgText.destroy()
+        });
+
         if (fence.hp <= 0) {
             fence.state = "BROKEN";
             fence.sprite.setTint(0x332211);
             fence.sprite.setAlpha(0.4);
 
             if (fence.sprite.body) {
-                fence.sprite.body.enable = false; // Disable collision!
+                fence.sprite.body.enable = false; // Disable collider so zombies walk through
             }
             return true;
         }
         return false;
     }
+
 
     public rebuildNearbyBrokenFences(playerX: number, playerY: number, backpack: Backpack): number {
         if (backpack.biomassCount < 1) return 0;
@@ -237,5 +263,31 @@ export class FenceManager {
             }
         }
         return false;
+    }
+
+    // Location: src/world/Fence.ts (Add inside FenceManager class)
+
+    public findNearbyOpening(gridX: number, gridY: number, preferredDir: Phaser.Math.Vector2): { x: number; y: number } | null {
+        // Check horizontal wall gaps (left / right)
+        const checkOffsets = [1, -1, 2, -2];
+
+        // If zombie is moving mostly vertically, check horizontal openings
+        if (Math.abs(preferredDir.y) > Math.abs(preferredDir.x)) {
+            for (const offset of checkOffsets) {
+                const targetGridX = gridX + offset;
+                if (!this.hasIntactFenceAt(targetGridX, gridY)) {
+                    return { x: targetGridX * 40 + 20, y: gridY * 40 + 20 };
+                }
+            }
+        } else {
+            // If zombie is moving mostly horizontally, check vertical openings
+            for (const offset of checkOffsets) {
+                const targetGridY = gridY + offset;
+                if (!this.hasIntactFenceAt(gridX, targetGridY)) {
+                    return { x: gridX * 40 + 20, y: targetGridY * 40 + 20 };
+                }
+            }
+        }
+        return null;
     }
 }

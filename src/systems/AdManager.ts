@@ -1,9 +1,15 @@
+﻿// Location: src/systems/AdManager.ts
+
 import Phaser from "phaser";
 
 export class AdManager {
     private static instance: AdManager;
     private gameRef!: Phaser.Game;
     private isAdActive: boolean = false;
+
+    // ⏱️ Universal 75s Cooldown Engine
+    private lastAdTimestamp: number = 0;
+    private adCooldownDurationMs: number = 75000; // 75 Seconds
 
     private constructor() {}
 
@@ -18,80 +24,78 @@ export class AdManager {
         this.gameRef = game;
     }
 
-    // Safely wraps CrazyGames / Poki Ad requests with a 3s safety unpause countdown
+    public getRemainingCooldownSeconds(): number {
+        const elapsed = Date.now() - this.lastAdTimestamp;
+        if (elapsed >= this.adCooldownDurationMs) return 0;
+        return Math.ceil((this.adCooldownDurationMs - elapsed) / 1000);
+    }
+
+    public canPlayAd(): boolean {
+        return this.getRemainingCooldownSeconds() === 0 && !this.isAdActive;
+    }
+
     public playAd(adType: "midgame" | "rewarded", onComplete: (success: boolean) => void) {
         if (this.isAdActive) return;
-        this.isAdActive = true;
 
+        // Check 75s cooldown
+        const remainingSecs = this.getRemainingCooldownSeconds();
+        if (remainingSecs > 0) {
+            console.warn(`[AdManager] Ad request blocked: On cooldown for ${remainingSecs}s`);
+            onComplete(false);
+            return;
+        }
+
+        this.isAdActive = true;
         this.suspendGameEngine();
 
         const sdk = (window as any).CrazyGames?.SDK;
+
+        const onAdFinished = (success: boolean) => {
+            this.lastAdTimestamp = Date.now(); // 🔒 Starts the 75s cooldown across all ads!
+            this.startResumeCountdown(() => {
+                this.isAdActive = false;
+                onComplete(success);
+            });
+        };
 
         if (sdk) {
             if (adType === "rewarded") {
                 sdk.ad.requestAd("rewarded", {
                     adStarted: () => console.log("[AdManager] Rewarded Ad Started"),
-                    adFinished: () => {
-                        this.startResumeCountdown(() => {
-                            this.isAdActive = false;
-                            onComplete(true); // Grant Reward (Revive / Full Fence Repair)
-                        });
-                    },
+                    adFinished: () => onAdFinished(true),
                     adError: (error: any) => {
                         console.error("[AdManager] Ad Error:", error);
-                        this.startResumeCountdown(() => {
-                            this.isAdActive = false;
-                            onComplete(false);
-                        });
+                        onAdFinished(false);
                     }
                 });
             } else {
                 sdk.ad.requestAd("midgame", {
                     adStarted: () => console.log("[AdManager] Midgame Ad Started"),
-                    adFinished: () => {
-                        this.startResumeCountdown(() => {
-                            this.isAdActive = false;
-                            onComplete(true);
-                        });
-                    },
-                    adError: () => {
-                        this.startResumeCountdown(() => {
-                            this.isAdActive = false;
-                            onComplete(true);
-                        });
-                    }
+                    adFinished: () => onAdFinished(true),
+                    adError: () => onAdFinished(true)
                 });
             }
         } else {
-            // Local Vite Dev Mock Mode (3s Ad + 3s Countdown)
+            // Dev environment simulation
             console.log(`[Mock AdManager] Simulating 3s ${adType} ad...`);
             setTimeout(() => {
-                this.startResumeCountdown(() => {
-                    this.isAdActive = false;
-                    onComplete(true);
-                });
+                onAdFinished(true);
             }, 3000);
         }
     }
 
     private suspendGameEngine() {
         if (!this.gameRef) return;
-
         this.gameRef.scene.getScenes(true).forEach((scene) => {
             scene.scene.pause();
             if (scene.physics) scene.physics.world.pause();
             if (scene.tweens) scene.tweens.pauseAll();
         });
-
-        if (this.gameRef.sound) {
-            this.gameRef.sound.mute = true;
-        }
+        if (this.gameRef.sound) this.gameRef.sound.mute = true;
     }
 
-    // Displays a 3-second countdown before unpausing physics
     private startResumeCountdown(onFinished: () => void) {
         if (!this.gameRef) return;
-
         const activeScene = this.gameRef.scene.getScenes(true)[0];
         if (!activeScene) {
             this.resumeGameEngine();
@@ -99,12 +103,10 @@ export class AdManager {
             return;
         }
 
-        // Unmute audio & resume scene rendering (keep physics paused)
         if (this.gameRef.sound) this.gameRef.sound.mute = false;
         activeScene.scene.resume();
 
-        // Screen Center for Countdown Banner
-        const zoom = activeScene.cameras.main.zoom || 1;
+        const zoom = activeScene.cameras.main.zoom || 1.25;
         const centerX = (activeScene.scale.width / zoom) / 2;
         const centerY = (activeScene.scale.height / zoom) / 2;
 
@@ -117,7 +119,6 @@ export class AdManager {
         }).setOrigin(0.5).setScrollFactor(0).setDepth(40000);
 
         let secondsLeft = 3;
-
         const interval = setInterval(() => {
             secondsLeft--;
             if (secondsLeft > 0) {
@@ -136,21 +137,11 @@ export class AdManager {
 
     private resumeGameEngine() {
         if (!this.gameRef) return;
-
         this.gameRef.scene.getScenes(false).forEach((scene) => {
-            if (scene.scene.isPaused()) {
-                scene.scene.resume();
-            }
-            if (scene.physics) {
-                scene.physics.world.resume();
-            }
-            if (scene.tweens) {
-                scene.tweens.resumeAll();
-            }
+            if (scene.scene.isPaused()) scene.scene.resume();
+            if (scene.physics) scene.physics.world.resume();
+            if (scene.tweens) scene.tweens.resumeAll();
         });
-
-        if (this.gameRef.sound) {
-            this.gameRef.sound.mute = false;
-        }
+        if (this.gameRef.sound) this.gameRef.sound.mute = false;
     }
 }

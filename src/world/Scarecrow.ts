@@ -33,24 +33,50 @@ export default class Scarecrow extends Phaser.GameObjects.Sprite {
         return 8;                       // Level 3: Harvests all 8 plots
     }
 
-    public showPrompt() {
+    public showPrompt(currentWave: number = 0) {
         const limit = this.getHarvestLimit();
-        this.promptText.setText(`Press [E] Harvest (Max ${limit} Plots) | Press [U] Upgrade Totem (10 Biomass)`);
-        this.promptText.setColor("#ffaa00");
+
+        if (this.level === 1) {
+            this.promptText.setText(`Press [E] Harvest (Max ${limit} Plots) | Press [U] Upgrade Totem (10 Biomass)`);
+            this.promptText.setColor("#ffaa00");
+        } else if (this.level === 2) {
+            // Level 3 is LOCKED until Wave 5 is defeated!
+            if (currentWave < 5) {
+                this.promptText.setText(`Press [E] Harvest (Max ${limit} Plots) | Lvl 3 Locked! (Defeat Wave 5 Boss)`);
+                this.promptText.setColor("#ffcc00");
+            } else {
+                this.promptText.setText(`Press [E] Harvest (Max ${limit} Plots) | Press [U] Upgrade Totem (20 Biomass)`);
+                this.promptText.setColor("#55ff55");
+            }
+        } else {
+            this.promptText.setText(`Press [E] Harvest All ${limit} Plots (MAX LEVEL)`);
+            this.promptText.setColor("#44aaff");
+        }
     }
+
 
     public hidePrompt() {
         this.promptText.setText("");
     }
 
-    public upgradeTotem(backpack: Backpack, farmPlots: FarmPlot[], scene: Phaser.Scene): boolean {
+    public upgradeTotem(backpack: Backpack, farmPlots: FarmPlot[], scene: Phaser.Scene, currentWave: number = 0): boolean {
         if (this.level >= 3) return false;
-        if (backpack.biomassCount < 10) return false;
 
-        backpack.addBiomass(-10);
+        // Block Level 3 upgrade during Waves 1–4
+        if (this.level === 2 && currentWave < 5) {
+            return false;
+        }
+
+        const upgradeCost = this.level === 1 ? 10 : 20;
+        if (backpack.biomassCount < upgradeCost) return false;
+
+        backpack.addBiomass(-upgradeCost);
         this.level += 1;
 
         farmPlots.forEach(plot => plot.setGlobalTier(this.level));
+
+        // Lvl 2 = 2 Charges | Lvl 3 = 3 Charges
+        backpack.setMaxRootCharges(this.level === 2 ? 2 : 3);
 
         if (this.level === 2) this.setTint(0x55ff55);
         if (this.level === 3) this.setTint(0x44aaff);

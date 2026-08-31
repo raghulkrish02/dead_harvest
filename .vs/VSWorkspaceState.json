@@ -1,17 +1,15 @@
 {
   "ExpandedNodes": [
     "",
-    "\\public",
-    "\\public\\assets",
-    "\\public\\assets\\maps",
     "\\src",
+    "\\src\\enemies",
     "\\src\\player",
     "\\src\\scenes",
     "\\src\\systems",
+    "\\src\\ui",
     "\\src\\utils",
     "\\src\\weapons",
     "\\src\\world"
   ],
-  "SelectedNode": "\\.gitignore",
   "PreviewInSolutionExplorer": false
 }

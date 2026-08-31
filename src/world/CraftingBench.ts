@@ -30,24 +30,24 @@ export default class CraftingBench extends Phaser.GameObjects.Sprite {
             return;
         }
 
-        if (biomassCount >= 2) {
-            this.promptText.setText("Press [E] Craft Fence (2 Biomass)");
+        if (biomassCount >= 1) {
+            this.promptText.setText("Press [E] Craft Fence (1 Biomass)");
             this.promptText.setColor("#55ff55");
         } else {
-            this.promptText.setText("Need 2 Biomass to Craft Fence!");
+            this.promptText.setText("Need 1 Biomass to Craft Fence!");
             this.promptText.setColor("#ff5555");
         }
-    }
+    }       
 
     public hidePrompt() {
         this.promptText.setText("");
     }
 
     public craftFence(backpack: Backpack): boolean {
-        if (backpack.biomassCount < 2) return false;
+        if (backpack.biomassCount < 1) return false;
 
-        backpack.addBiomass(-2);
-        backpack.addFences(1); // Adds 1 Crafted Fence Item to Backpack!
+        backpack.addBiomass(-1); // Only costs 1 Biomass!
+        backpack.addFences(1);
         return true;
     }
 }

@@ -1,4 +1,4 @@
-import Phaser from "phaser";
+﻿import Phaser from "phaser";
 
 export enum HerbState {
     EMPTY = "EMPTY",
@@ -57,7 +57,7 @@ export default class HerbPlot extends Phaser.GameObjects.Sprite {
         }
     }
 
-    public showPrompt(biomassCount: number, isWaveActive: boolean) {
+    public showPrompt(pepperSeeds: number, isWaveActive: boolean) {
         if (isWaveActive) {
             this.promptText.setText("Farming Locked During Wave!");
             this.promptText.setColor("#ff3333");
@@ -65,29 +65,33 @@ export default class HerbPlot extends Phaser.GameObjects.Sprite {
         }
 
         if (!this.isUnlocked) {
-            if (biomassCount >= 3) {
-                this.promptText.setText("Press [E] Unlock Herb Plot (3 Biomass)");
+            if (pepperSeeds >= 4) {
+                this.promptText.setText("Press [E] Unlock Herb Plot (4 Seeds)");
                 this.promptText.setColor("#55ff55");
             } else {
-                this.promptText.setText("Herb Plot Locked! Need 3 Biomass!");
+                this.promptText.setText("Herb Plot Locked! Need 4 Seeds!");
                 this.promptText.setColor("#ff5555");
             }
             return;
         }
 
         if (this.state === HerbState.EMPTY) {
-            if (biomassCount > 0) {
-                this.promptText.setText("Press [E] Plant Heal Herb (1 Biomass)");
+            if (this.state === HerbState.EMPTY) {
+            // 🛡️ STRICT SAFETY BUFFER: Must have strictly MORE THAN 2 seeds!
+            if (pepperSeeds > 2) {
+                const reserve = pepperSeeds - 2;
+                this.promptText.setText(`Press [E] Cultivate Herb (2 Seeds | Reserve: ${reserve})`);
                 this.promptText.setColor("#55ff55");
             } else {
-                this.promptText.setText("Need 1 Biomass!");
-                this.promptText.setColor("#ff5555");
+                this.promptText.setText(`Need >2 Seeds! (Have: ${pepperSeeds} | Keeping 2 for Pepper Farm)`);
+                this.promptText.setColor("#ffaa00");
             }
+        }
         } else if (this.state === HerbState.PLANTED || this.state === HerbState.GROWING) {
-            this.promptText.setText("Growing Herb...");
+            this.promptText.setText("Growing Heal Herb... (4s)");
             this.promptText.setColor("#ffff55");
         } else if (this.state === HerbState.MATURE) {
-            this.promptText.setText("Press [E] Harvest Heal Herb!");
+            this.promptText.setText("Press [E] Harvest Heal Herb (+25 HP)!");
             this.promptText.setColor("#00ff66");
         }
     }
@@ -104,7 +108,6 @@ export default class HerbPlot extends Phaser.GameObjects.Sprite {
 
     public plantHerb(): boolean {
         if (!this.isUnlocked || this.state !== HerbState.EMPTY) return false;
-
         this.state = HerbState.PLANTED;
         this.growthTimer = 0;
         this.setTint(0x228844);

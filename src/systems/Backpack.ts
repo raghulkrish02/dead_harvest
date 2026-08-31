@@ -5,7 +5,13 @@ export default class Backpack {
     public pepperAmmo: number = 0;
     public pepperSeeds: number = 2;
     public healHerbs: number = 1;
-    public fences: number = 0; // Crafted fences in inventory
+    public fences: number = 3; // 🪵 Start with 3 free fences for Day 1 bunker setup!
+
+
+     // Root-Burst Ultimate Properties
+    public rootCharges: number = 1;     // Starts with 1 ready charge
+    public maxRootCharges: number = 1;  // MAX capacity starts at 1! (Upgrades to 2 at Lvl 2 Totem)
+    public harvestProgress: number = 0; // 0 to 4
 
     private isOpen: boolean = false;
     
@@ -13,6 +19,10 @@ export default class Backpack {
     private hpBg!: Phaser.GameObjects.Rectangle;
     private hpFill!: Phaser.GameObjects.Rectangle;
     private hpText!: Phaser.GameObjects.Text;
+
+    // Root-Burst HUD Elements
+    private rootBurstBg!: Phaser.GameObjects.Rectangle;
+    private rootBurstText!: Phaser.GameObjects.Text;
 
     // --- 2. BOTTOM-CENTER BAG BUTTON ---
     private bagButton!: Phaser.GameObjects.Rectangle;
@@ -23,6 +33,16 @@ export default class Backpack {
     private windowTitle!: Phaser.GameObjects.Text;
     private windowContent!: Phaser.GameObjects.Text;
     private closeButton!: Phaser.GameObjects.Text;
+
+    public isDodgeUnlocked: boolean = true; // Set to true to test right away! nw its from wave 1
+    public stamina: number = 100;
+    public maxStamina: number = 100;
+    private staminaRegenDelayTimer: number = 0; // 0.8s Delay Tracker
+
+    // Stamina HUD
+    private staminaBg!: Phaser.GameObjects.Rectangle;
+    private staminaFill!: Phaser.GameObjects.Rectangle;
+    private staminaText!: Phaser.GameObjects.Text;
 
     constructor(scene: Phaser.Scene) {
         // ==========================================
@@ -43,6 +63,36 @@ export default class Backpack {
             stroke: "#000000",
             strokeThickness: 3
         }).setOrigin(0.5).setScrollFactor(0).setDepth(30001);
+
+         // 🌿 Root-Burst HUD (Docked directly below HP Bar)
+        this.rootBurstBg = scene.add.rectangle(220, 155, 164, 18, 0x0a1a0a, 0.85);
+        this.rootBurstBg.setStrokeStyle(1.5, 0x33aa33);
+        this.rootBurstBg.setScrollFactor(0).setDepth(29999);
+
+        this.rootBurstText = scene.add.text(220, 155, "🌿 ROOT [Q]: 🟢 🟢 (2/2)", {
+            fontFamily: "Arial",
+            fontSize: "10px",
+            color: "#55ff55",
+            stroke: "#000000",
+            strokeThickness: 3
+        }).setOrigin(0.5).setScrollFactor(0).setDepth(30001);
+
+        // ⚡ Stamina HUD Bar (Docked below Root Burst at y = 175)
+        // ⚡ Stamina HUD (Visible from Wave 1)
+        this.staminaBg = scene.add.rectangle(220, 175, 164, 14, 0x000000, 0.8);
+        this.staminaBg.setStrokeStyle(1.5, 0x00aaff).setScrollFactor(0).setDepth(29999).setVisible(true);
+
+        this.staminaFill = scene.add.rectangle(140, 175, 160, 10, 0x00aaff);
+        this.staminaFill.setOrigin(0, 0.5).setScrollFactor(0).setDepth(30000).setVisible(true);
+
+        this.staminaText = scene.add.text(220, 175, "⚡ STAMINA [SHIFT]: 100%", {
+            fontFamily: "Arial",
+            fontSize: "9px",
+            color: "#ffffff",
+            stroke: "#000000",
+            strokeThickness: 2
+        }).setOrigin(0.5).setScrollFactor(0).setDepth(30001).setVisible(true);
+
 
         // ==========================================
         // --- BOTTOM-CENTER BAG BUTTON ---
@@ -102,16 +152,18 @@ export default class Backpack {
         this.closeButton.on("pointerdown", () => this.toggleInventory(scene));
 
         this.windowContent = scene.add.text(windowX - 105, windowY - 45, "", {
-            fontFamily: "Arial",
-            fontSize: "13px",
-            color: "#ffffff",
-            lineSpacing: 8,
-            stroke: "#000000",
-            strokeThickness: 2
-        }).setScrollFactor(0).setDepth(30002).setVisible(false);
+                fontFamily: "Arial",
+                fontSize: "13px",
+                color: "#ffffff",
+                lineSpacing: 8,
+                stroke: "#000000",
+                strokeThickness: 2
+            }).setScrollFactor(0).setDepth(30002).setVisible(false);
 
-        this.updateHUD(scene);
-    }
+            this.updateHUD(scene);
+            this.updateRootBurstHUD();
+        } // <-- Fixed: Properly closes the constructor!
+
 
     public getUIElements(): Phaser.GameObjects.GameObject[] {
         return [
@@ -152,22 +204,27 @@ export default class Backpack {
 
     public addBiomass(amount: number) {
         this.biomassCount += amount;
+        if (this.isOpen) this.updateHUD(); // 🎒 Live update on pickup/spending!
     }
 
     public addPepperAmmo(amount: number) {
         this.pepperAmmo += amount;
+        if (this.isOpen) this.updateHUD(); // 🎒 Live update on harvest/shooting!
     }
 
     public addPepperSeeds(amount: number) {
         this.pepperSeeds += amount;
+        if (this.isOpen) this.updateHUD(); // 🎒 Live update on seed drops!
     }
 
     public addHealHerbs(amount: number) {
         this.healHerbs += amount;
+        if (this.isOpen) this.updateHUD(); // 🎒 Live update on herb harvest!
     }
 
     public addFences(amount: number) {
         this.fences += amount;
+        if (this.isOpen) this.updateHUD(); // 🎒 Live update on crafting!
     }
 
     public updateHUD(scene?: Phaser.Scene) {
@@ -181,4 +238,102 @@ export default class Backpack {
             );
         }
     }
+    public updateRootBurstHUD() {
+        let chargeIcons = "";
+        for (let i = 0; i < this.maxRootCharges; i++) {
+            chargeIcons += i < this.rootCharges ? "🟢 " : "⚪ ";
+        }
+        
+        // Only show [X/4] progress when you actually have missing charges to fill!
+        const progressIndicator = this.rootCharges < this.maxRootCharges ? ` [${this.harvestProgress}/4]` : "";
+        this.rootBurstText.setText(`🌿 ROOT [Q]: ${chargeIcons.trim()} (${this.rootCharges}/${this.maxRootCharges})${progressIndicator}`);
+    }
+
+    public recordHarvest(): boolean {
+        // 🔒 ANTI-EXPLOIT LOCK: If already at max capacity, do NOT bank any partial progress!
+        if (this.rootCharges >= this.maxRootCharges) {
+            this.harvestProgress = 0;
+            this.updateRootBurstHUD();
+            return false;
+        }
+
+        this.harvestProgress++;
+        
+        if (this.harvestProgress >= 4) {
+            this.harvestProgress = 0;
+            this.rootCharges = Math.min(this.maxRootCharges, this.rootCharges + 1);
+            this.updateRootBurstHUD();
+            return true; // Gained full charge!
+        }
+
+        this.updateRootBurstHUD();
+        return false;
+    }
+
+    public consumeRootCharge(): boolean {
+        if (this.rootCharges > 0) {
+            this.rootCharges--;
+            this.updateRootBurstHUD();
+            return true;
+        }
+        return false;
+    }
+
+    public setMaxRootCharges(max: number) {
+        this.maxRootCharges = max;
+        this.rootCharges = Math.min(this.rootCharges, max);
+        this.updateRootBurstHUD();
+    }
+
+    public updateStamina(delta: number, isMoving: boolean) {
+        // 1. Check if the 0.8s delay is active
+        if (this.staminaBg.scene.time.now < this.staminaRegenDelayTimer) {
+            const pct = Phaser.Math.Clamp(this.stamina / this.maxStamina, 0, 1);
+            this.staminaFill.displayWidth = 160 * pct;
+            this.staminaText.setText(`⚡ STAMINA [SHIFT]: ${Math.round(this.stamina)}%`);
+            this.staminaFill.setFillStyle(0xff3300); // Red alert while frozen!
+            return;
+        }
+
+        // 2. Recharge: 6.0s while moving (16.67/s) | 3.0s standing still (33.33/s)
+        const regenRate = isMoving ? (100 / 6000) * delta : (100 / 3000) * delta;
+        this.stamina = Math.min(this.maxStamina, this.stamina + regenRate);
+
+        const pct = Phaser.Math.Clamp(this.stamina / this.maxStamina, 0, 1);
+        this.staminaFill.displayWidth = 160 * pct;
+        this.staminaText.setText(`⚡ STAMINA [SHIFT]: ${Math.round(this.stamina)}%`);
+
+        if (this.stamina < 45) this.staminaFill.setFillStyle(0xffaa00);
+        else this.staminaFill.setFillStyle(0x00aaff);
+    }
+
+    public consumeStamina(amount: number = 45): boolean {
+        if (this.stamina >= amount) {
+            this.stamina -= amount;
+            // 🔒 Freeze stamina regeneration for 0.8 seconds (800ms) after dodging!
+            const mainScene = (this as any).scene || Phaser.Scene;
+            this.staminaRegenDelayTimer = (this.staminaBg.scene.time.now) + 800;
+            return true;
+        }
+        return false;
+    }
+
+    public unlockDodgeUI() {
+        this.isDodgeUnlocked = true;
+        this.staminaBg?.setVisible(true);
+        this.staminaFill?.setVisible(true);
+        this.staminaText?.setVisible(true);
+    }
+
+    public consumeMeleeStamina(isHolding: boolean = false): boolean {
+        const cost = isHolding ? 12 : 7; // 👈 7 for clicking, 12 for holding
+        if (this.stamina >= cost) {
+            this.stamina -= cost;
+            this.staminaRegenDelayTimer = (this.staminaBg.scene.time.now) + 350;
+            return true;
+        }
+        return false;
+    }
+
+
 }
