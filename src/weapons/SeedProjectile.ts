@@ -18,13 +18,24 @@ export default class SeedProjectile extends Phaser.Physics.Arcade.Sprite {
 
         this.setActive(true).setVisible(true);
 
+        const angle = Phaser.Math.Angle.Between(x, y, targetX, targetY);
+        this.setRotation(angle + Math.PI / 2);
+
+        this.setDepth(y + 10);
+
         if (this.isPhoenix) {
             this.damage = 45;
-            this.speed = 520;
-            this.knockbackForce = 300;
-            this.setDisplaySize(24, 24);
-            this.setTint(0xff3300);
-            this.startPhoenixTrail();
+            this.speed = 540;
+            this.knockbackForce = 320;
+            this.setDisplaySize(28, 22);
+            this.setTint(0xffeedd);
+
+            // 🌟 Zero-Lag Object Glow (PreFX) & Additive Blend
+            if (this.preFX) {
+                this.preFX.addGlow(0xff6600, 3, 0.8, false, 0.1, 10);
+            }
+            this.setBlendMode(Phaser.BlendModes.ADD);
+            this.startPhoenixFlightVFX(angle);
         } else {
             this.damage = 15;
             this.speed = 480;
@@ -32,11 +43,6 @@ export default class SeedProjectile extends Phaser.Physics.Arcade.Sprite {
             this.setDisplaySize(12, 12);
             this.setTint(0xff6600);
         }
-
-        this.setDepth(y + 10);
-
-        const angle = Phaser.Math.Angle.Between(x, y, targetX, targetY);
-        this.setRotation(angle + Math.PI / 2);
 
         // Immediate rock-solid velocity
         const velocityX = Math.cos(angle) * this.speed;
@@ -51,28 +57,73 @@ export default class SeedProjectile extends Phaser.Physics.Arcade.Sprite {
         });
     }
 
-    private startPhoenixTrail() {
+    private startPhoenixFlightVFX(flyAngle: number) {
+        // 🦅 Swept-Wing Blazing Phoenix with Thermal Smoke & Feather Trails
         this.trailTimer = this.scene.time.addEvent({
-            delay: 35,
-            repeat: 35,
+            delay: 20,
+            repeat: 65,
             callback: () => {
                 if (!this.active) {
                     this.trailTimer?.remove();
                     return;
                 }
-                const spark = this.scene.add.circle(
-                    this.x + Phaser.Math.Between(-4, 4),
-                    this.y + Phaser.Math.Between(-4, 4),
-                    Phaser.Math.Between(4, 7),
-                    Phaser.Math.RND.pick([0xff2200, 0xff7700, 0xffff00])
-                ).setDepth(24000);
 
+                const cos = Math.cos(flyAngle);
+                const sin = Math.sin(flyAngle);
+                const perpX = Math.cos(flyAngle + Math.PI / 2);
+                const perpY = Math.sin(flyAngle + Math.PI / 2);
+
+                // 1. Arched Swept Flaming Wings (Left & Right Flanks)
+                [-18, -9, 9, 18].forEach((wingSpan) => {
+                    const wingBackSweep = Math.abs(wingSpan) * 0.8;
+                    const wx = this.x - cos * wingBackSweep + perpX * wingSpan;
+                    const wy = this.y - sin * wingBackSweep + perpY * wingSpan;
+
+                    const feather = this.scene.add.ellipse(wx, wy, Math.abs(wingSpan) > 10 ? 12 : 8, 4, 0xff7700, 0.95);
+                    feather.setRotation(flyAngle + (wingSpan > 0 ? 0.35 : -0.35))
+                           .setBlendMode(Phaser.BlendModes.ADD)
+                           .setDepth(25000);
+
+                    this.scene.tweens.add({
+                        targets: feather,
+                        x: wx - cos * 22,
+                        y: wy - sin * 22,
+                        scaleX: 0.2,
+                        alpha: 0,
+                        duration: 180,
+                        ease: "Quad.easeOut",
+                        onComplete: () => feather.destroy()
+                    });
+                });
+
+                // 2. Trailing Thermal Soot & White-Hot Core Embers
+                const tailX = this.x - cos * 16 + Phaser.Math.Between(-3, 3);
+                const tailY = this.y - sin * 16 + Phaser.Math.Between(-3, 3);
+
+                // Additive White/Gold Spark
+                const ember = this.scene.add.circle(tailX, tailY, Phaser.Math.Between(3, 5), 0xffff88, 1.0);
+                ember.setBlendMode(Phaser.BlendModes.ADD).setDepth(25001);
                 this.scene.tweens.add({
-                    targets: spark,
+                    targets: ember,
+                    x: tailX - cos * 35,
+                    y: tailY - sin * 35,
+                    scale: 0.1,
                     alpha: 0,
-                    scale: 0.2,
-                    duration: 180,
-                    onComplete: () => spark.destroy()
+                    duration: 240,
+                    onComplete: () => ember.destroy()
+                });
+
+                // Dark Rising Thermal Smoke Puff
+                const smoke = this.scene.add.circle(tailX, tailY, Phaser.Math.Between(5, 9), 0x331a0a, 0.45).setDepth(24998);
+                this.scene.tweens.add({
+                    targets: smoke,
+                    x: tailX - cos * 40,
+                    y: tailY - sin * 40 - 10,
+                    scale: 1.6,
+                    alpha: 0,
+                    duration: 450,
+                    ease: "Cubic.easeOut",
+                    onComplete: () => smoke.destroy()
                 });
             }
         });
@@ -100,60 +151,115 @@ export default class SeedProjectile extends Phaser.Physics.Arcade.Sprite {
         }
     }
 
-    public onHitObstacle(obstacleType: "TREE" | "ROCK") {
+    public onHitObstacle(_obstacleType: "TREE" | "ROCK") {
         if (!this.active) return;
 
-        if (this.isPhoenix) {
-            this.explodePhoenixAoE();
-        } else {
+        const mainScene = this.scene as any;
+        if (mainScene.trapManager) {
+            const trap = mainScene.trapManager.getTrapAtWorldPos(this.x, this.y);
+            if (trap && trap.type === "BARREL" && mainScene.waveManager) {
+                mainScene.trapManager.detonateBarrel(trap, mainScene.waveManager.getActiveZombies());
+                this.cleanup();
+                return;
+            }
+        }
+
+        if (this.isPhoenix) this.explodePhoenixAoE();
+        else {
             this.spawnFireBurst();
             this.cleanup();
         }
     }
 
     private explodePhoenixAoE() {
-        const aoeRadius = 90;
+        const aoeRadius = 105;
         const mainScene = this.scene as any;
 
-        if (mainScene.triggerHitStop) mainScene.triggerHitStop(60);
-        this.scene.cameras.main.shake(120, 0.008);
+        if (mainScene.triggerHitStop) mainScene.triggerHitStop(70);
+        this.scene.cameras.main.shake(160, 0.012);
 
-        const blastRing = this.scene.add.circle(this.x, this.y, 12, 0xff3300, 0.7);
-        blastRing.setStrokeStyle(4, 0xffff00).setDepth(25000);
+        // 💥 PHASE 1 (0–300ms): High-Speed Additive Solar Shockwaves
+        const outerRing = this.scene.add.circle(this.x, this.y, 12, 0xff3300, 0.9);
+        outerRing.setStrokeStyle(6, 0xffff66).setBlendMode(Phaser.BlendModes.ADD).setDepth(25002);
         this.scene.tweens.add({
-            targets: blastRing,
+            targets: outerRing,
             radius: aoeRadius,
             alpha: 0,
-            duration: 350,
-            ease: "Quad.easeOut",
-            onComplete: () => blastRing.destroy()
+            duration: 340,
+            ease: "Expo.easeOut",
+            onComplete: () => outerRing.destroy()
         });
 
-        for (let i = 0; i < 16; i++) {
-            const spark = this.scene.add.circle(
-                this.x, 
-                this.y, 
-                Phaser.Math.Between(4, 7), 
-                Phaser.Math.RND.pick([0xff2200, 0xff7700, 0xffff00])
-            );
-            spark.setDepth(25000);
-            const angle = Phaser.Math.DegToRad(Phaser.Math.Between(0, 360));
-            const dist = Phaser.Math.Between(30, aoeRadius);
+        const flashCore = this.scene.add.circle(this.x, this.y, 18, 0xffffff, 1.0);
+        flashCore.setBlendMode(Phaser.BlendModes.ADD).setDepth(25003);
+        this.scene.tweens.add({
+            targets: flashCore,
+            radius: 65,
+            alpha: 0,
+            duration: 200,
+            ease: "Quad.easeOut",
+            onComplete: () => flashCore.destroy()
+        });
+
+        // � PHASE 2 (100–1600ms): Volumetric Billowing Smoke & Fog Clouds (Multi-Layer Depth)
+        for (let s = 0; s < 14; s++) {
+            const smokeAng = Phaser.Math.FloatBetween(0, Math.PI * 2);
+            const smokeDist = Phaser.Math.Between(20, aoeRadius * 0.75);
+            const targetX = this.x + Math.cos(smokeAng) * smokeDist;
+            const targetY = this.y + Math.sin(smokeAng) * smokeDist - Phaser.Math.Between(10, 25);
+
+            const smokeColor = s % 2 === 0 ? 0x221815 : 0x3d2314;
+            const smokeCloud = this.scene.add.circle(this.x, this.y, Phaser.Math.Between(14, 22), smokeColor, 0.75);
+            smokeCloud.setDepth(24999);
 
             this.scene.tweens.add({
-                targets: spark,
-                x: this.x + Math.cos(angle) * dist,
-                y: this.y + Math.sin(angle) * dist,
+                targets: smokeCloud,
+                x: targetX,
+                y: targetY,
+                scale: Phaser.Math.FloatBetween(1.8, 2.6),
                 alpha: 0,
-                scale: 0.1,
-                duration: Phaser.Math.Between(250, 450),
-                onComplete: () => spark.destroy()
+                duration: Phaser.Math.Between(1100, 1600),
+                ease: "Cubic.easeOut",
+                onComplete: () => smokeCloud.destroy()
             });
         }
 
+        // 🔥 PHASE 3 (200–1800ms): Rising Volcanic Ash & Floating Sparks (Defies Gravity)
+        for (let e = 0; e < 18; e++) {
+            const emberAng = Phaser.Math.FloatBetween(0, Math.PI * 2);
+            const spreadX = this.x + Math.cos(emberAng) * Phaser.Math.Between(15, 65);
+            const spreadY = this.y + Math.sin(emberAng) * Phaser.Math.Between(15, 45);
+
+            const ashEmber = this.scene.add.circle(spreadX, spreadY, Phaser.Math.Between(2, 4), 0xffaa00, 0.95);
+            ashEmber.setBlendMode(Phaser.BlendModes.ADD).setDepth(25001);
+
+            this.scene.tweens.add({
+                targets: ashEmber,
+                x: spreadX + Phaser.Math.Between(-20, 20),
+                y: spreadY - Phaser.Math.Between(35, 75), // 👈 Drifts upward like real fire ash
+                scale: 0.1,
+                alpha: 0,
+                duration: Phaser.Math.Between(1200, 1800),
+                ease: "Quad.easeOut",
+                onComplete: () => ashEmber.destroy()
+            });
+        }
+
+        // 🩸 PHASE 4 (0–2000ms): Charred Ground Crater Decal (Depth 2)
+        const scorch = this.scene.add.circle(this.x, this.y, 42, 0x240d05, 0.85).setDepth(2);
+        this.scene.tweens.add({
+            targets: scorch,
+            scale: 1.3,
+            alpha: 0,
+            duration: 1800,
+            ease: "Quad.easeOut",
+            onComplete: () => scorch.destroy()
+        });
+
+        // Damage & Knockback to Zombies
         if (mainScene.waveManager) {
-            const activeZombies: Zombie[] = mainScene.waveManager.getActiveZombies();
-            activeZombies.forEach((z) => {
+            const activeZombies = mainScene.waveManager.getActiveZombies();
+            activeZombies.forEach((z: any) => {
                 const dist = Phaser.Math.Distance.Between(this.x, this.y, z.x, z.y - (z.displayHeight / 2));
                 if (dist <= aoeRadius) {
                     const knockDir = new Phaser.Math.Vector2(z.x - this.x, z.y - this.y).normalize();

@@ -23,7 +23,7 @@ const config: Phaser.Types.Core.GameConfig = {
         default: "arcade",
         arcade: {
             gravity: { x: 0, y: 0 },
-            debug: true // Set to true if you want to see collision hitboxes
+            debug: false // Set to true if you want to see collision hitboxes
         }
     },
     scene: [MainScene]

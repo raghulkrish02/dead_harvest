@@ -23,7 +23,7 @@ export default class Minimap {
         const visibleScreenWidth = scene.scale.width / zoom;
 
         // Shifted down to y = 80 and padded cleanly from the right edge
-        this.posX = visibleScreenWidth - this.mapSize +120;
+        this.posX = visibleScreenWidth - this.mapSize +110;
         this.posY = 80; // Moved down so the entire box is visible!
         // 1. Static Dark Forest Background
         this.bgBox = scene.add.rectangle(

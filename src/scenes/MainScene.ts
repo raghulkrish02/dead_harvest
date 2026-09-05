@@ -1,4 +1,4 @@
-﻿import Phaser from "phaser";
+import Phaser from "phaser";
 import Player from "../player/Player";
 import WorldGenerator from "../world/WorldGenerator";
 import Zombie from "../enemies/Zombie";
@@ -9,11 +9,12 @@ import CraftingBench from "../world/CraftingBench.ts";
 import Scarecrow from "../world/Scarecrow.ts";
 import SeedProjectile from "../weapons/SeedProjectile.ts";
 import WaveManager from "../systems/WaveManager.ts";
-import { FenceManager } from "../world/Fence.ts";
 import { AdManager } from "../systems/AdManager.ts";
 import DebugManager from "../utils/DebugManager.ts";
 import SeedComposter from "../world/SeedComposter.ts";
 import Minimap from "../ui/Minimap.ts";
+import { TrapManager } from "../world/TrapManager.ts";
+import type { TrapType } from "../world/TrapManager.ts";
 
 export default class MainScene extends Phaser.Scene {
     public player!: Player;
@@ -25,8 +26,10 @@ export default class MainScene extends Phaser.Scene {
     private herbPlots: HerbPlot[] = [];
     private scarecrow!: Scarecrow;
     private craftingBench!: CraftingBench;
-    public fenceManager!: FenceManager;
+    public trapManager!: TrapManager;
     private waveManager!: WaveManager;
+    public biomassGroup!: Phaser.Physics.Arcade.Group;
+    public rootSpores: Phaser.GameObjects.Arc[] = [];
     private waveText!: Phaser.GameObjects.Text;
 
     private interactKey!: Phaser.Input.Keyboard.Key;
@@ -36,11 +39,14 @@ export default class MainScene extends Phaser.Scene {
     private rootBurstKey!: Phaser.Input.Keyboard.Key;
     private projectiles: SeedProjectile[] = [];
 
-    public isPlacingFence: boolean = false;
-    private fenceGhost!: Phaser.GameObjects.Rectangle;
+    // 🔨 Build Bar [F] UI & Ghost
+    public isBuildBarOpen: boolean = false;
+    private buildBarGroup: Phaser.GameObjects.GameObject[] = [];
+    private ghostTrapBox!: Phaser.GameObjects.Rectangle;
+    private ghostRangeCircle!: Phaser.GameObjects.Arc;
     private deathModalGroup: Phaser.GameObjects.GameObject[] = [];
 
-    private seedComposter!: SeedComposter;
+    private farmDirtClearing!: Phaser.GameObjects.Rectangle;
     private lastRootBurstTime: number = 0;
 
     public meleeHitbox!: Phaser.Physics.Arcade.Sprite;
@@ -64,7 +70,12 @@ export default class MainScene extends Phaser.Scene {
 
     // ☀️ DYNAMIC ATMOSPHERE OVERLAYS
     private nightOverlay!: Phaser.GameObjects.Rectangle;
-    private isNightActive: boolean = false;
+    public isNightActive: boolean = false;
+
+    private grassFloor!: Phaser.GameObjects.TileSprite;
+
+    private hasRewardedPumpkins: boolean = false;
+    private isEKeyHeld: boolean = false;
 
     constructor() {
         super("MainScene");
@@ -81,11 +92,24 @@ export default class MainScene extends Phaser.Scene {
         this.load.image("bush", "assets/tiles/bush.png");
         this.load.image("stump", "assets/tiles/trunk.png");
 
+        this.load.image('pitchfork', 'assets/weapons/pitchfork.png');
+        this.load.image("grass_tile", "assets/tiles/grass_tile.png");
+
         // --- CLEAN PLAYER SPRITES (128x128 Standard) ---
         this.load.image("player_idle", "assets/player/player_idle.png");
         this.load.spritesheet("player_side", "assets/player/player_side.png", {
             frameWidth: 192,  // 👈 Change to 192
             frameHeight: 192 // 👈 Change to 192
+        });
+
+        this.load.spritesheet("zombie_walker", "assets/enemies/zombie_walker.png", {
+            frameWidth: 192,
+            frameHeight: 192
+        });
+
+        this.load.spritesheet("zombie_gibs", "assets/enemies/zombie_gibs.png", {
+            frameWidth: 24,
+            frameHeight: 24
         });
 
         this.load.spritesheet("player", "assets/player/Player.png", {
@@ -102,15 +126,215 @@ export default class MainScene extends Phaser.Scene {
             this.game.canvas.oncontextmenu = (e) => e.preventDefault();
         }
 
-        this.world = new WorldGenerator(this);
-        const map = this.world.generate();
+        // =========================================================================
+        // 🌿 1. SEAMLESS 3072x3072 TILESPRITE GRASS ARENA
+        // =========================================================================
+        const mapSize = 3072;
+        this.grassFloor = this.add.tileSprite(mapSize / 2, mapSize / 2, mapSize, mapSize, "grass_tile");
+        this.grassFloor.setDepth(0);
+        
+        // 🌿 Shrinks grass blades to natural ankle-height!
+        this.grassFloor.setTileScale(0.45, 0.45);
 
-        const spawnObj = map.findObject("objects", (obj) => obj.name === "PlayerSpawn");
-        const spawnX = spawnObj?.x ?? (map.widthInPixels / 2);
-        const spawnY = spawnObj?.y ?? (map.heightInPixels / 2);
+        this.world = new WorldGenerator(this);
+        this.world.generate(mapSize, mapSize);
+
+        // 📍 Exact Map Center Spawn (1536, 1536)
+        const spawnX = mapSize / 2;
+        const spawnY = mapSize / 2;
 
         this.player = new Player(this, spawnX, spawnY);
         this.backpack = new Backpack(this);
+
+        // 🚀 Fast Loot Group (Eliminates 800-object scene traversal lag)
+        // 💎 1. Procedural 3D Shaded Spherical Emerald Gem (GPU Cached)
+        if (!this.textures.exists("biomass_emerald")) {
+            const gfx = this.make.graphics({ x: 0, y: 0 });
+            // Layer 1: Dark 3D Shadow Base
+            gfx.fillStyle(0x063b17, 1.0);
+            gfx.fillCircle(13, 13, 11);
+            // Layer 2: Rich Translucent Jade Body
+            gfx.fillStyle(0x0fa842, 1.0);
+            gfx.fillCircle(13, 13, 9.5);
+            // Layer 3: Top-Left Offset 3D Light Core
+            gfx.fillStyle(0x35f575, 1.0);
+            gfx.fillCircle(10.5, 10.5, 6.5);
+            // Layer 4: Specular Sunlit Hotspot
+            gfx.fillStyle(0xaaffcc, 0.95);
+            gfx.fillCircle(8.5, 8.5, 3.2);
+            // Layer 5: Pure White Crystalline Glint
+            gfx.fillStyle(0xffffff, 1.0);
+            gfx.fillCircle(7.5, 7.5, 1.4);
+            // Layer 6: Soft Outer Ambient Rim Glow
+            gfx.lineStyle(1.5, 0x55ff88, 0.6);
+            gfx.strokeCircle(13, 13, 11.5);
+            gfx.generateTexture("biomass_emerald", 26, 26);
+            gfx.destroy();
+        }
+
+        // 🧲 2. TRIPLE-DISTANCE VAMPIRE SURVIVORS MEGA-SLINGSHOT SUCTION
+        this.biomassGroup = this.physics.add.group();
+        this.physics.add.overlap(this.player, this.biomassGroup, (_player, gemObj) => {
+            const gem = gemObj as Phaser.GameObjects.Sprite;
+            if (!gem || !gem.active || gem.getData("isCollecting")) return;
+
+            gem.setData("isCollecting", true);
+            if (gem.body) (gem.body as Phaser.Physics.Arcade.Body).enable = false;
+
+            const amount = gem.getData("amount") || 1;
+            
+            // Clean up 3D revolving components
+            ["orbitalRing"].forEach(key => {
+                const item = gem.getData(key) as Phaser.GameObjects.GameObject;
+                if (item && item.active) item.destroy();
+            });
+
+            // 💎 Define glint and aura safely in scope
+            const glint = gem.getData("glint") as Phaser.GameObjects.Arc;
+            const aura = gem.getData("aura") as Phaser.GameObjects.Arc;
+            const groundLight = gem.getData("groundLight") as Phaser.GameObjects.Arc;
+            if (groundLight && groundLight.active) groundLight.destroy();
+
+            const startX = gem.x;
+            const startY = gem.y;
+            const chestX = this.player.x;
+            const chestY = this.player.y - (this.player.displayHeight * 0.45);
+            // 🌳 Y-Sorted: Renders in front of player, but BEHIND trees when standing behind them!
+            const collectDepth = this.player.depth + 2;
+
+            // 🏹 TRIPLE-DISTANCE SLINGSHOT VECTOR
+            const dx = startX - chestX;
+            const dy = startY - chestY;
+            const len = Math.hypot(dx, dy) || 1;
+            const normX = dx / len;
+            const normY = dy / len;
+            
+            // Randomize curve side (left or right orbital sweep)
+            const side = Math.random() < 0.5 ? 1 : -1;
+            const perpX = -normY * side;
+            const perpY = normX * side;
+
+            // Point 1: Flings 115px OUTWARD away from player (TRIPLE the previous distance!)
+            const p1X = startX + normX * 115 + perpX * 55;
+            const p1Y = startY + normY * 115 + perpY * 55;
+
+            // Point 2: Wide sweeping 140px orbital flank
+            const p2X = (startX + chestX) / 2 + perpX * 140;
+            const p2Y = (startY + chestY) / 2 + perpY * 70;
+
+            let prevX = startX;
+            let prevY = startY;
+            let frameCount = 0;
+            let progress = { t: 0 };
+
+            this.tweens.add({
+                targets: progress,
+                t: 1,
+                duration: 460,
+                ease: "Cubic.easeInOut",
+                onUpdate: () => {
+                    if (!gem.active) return;
+                    const t = progress.t;
+                    const u = 1 - t;
+
+                    // Cubic Bezier: Massive 115px kickback -> Wide orbital loop -> Chest plunge
+                    const liveChestX = this.player.x;
+                    const liveChestY = this.player.y - (this.player.displayHeight * 0.45);
+
+                    gem.x = u * u * u * startX + 3 * u * u * t * p1X + 3 * u * t * t * p2X + t * t * t * liveChestX;
+                    gem.y = u * u * u * startY + 3 * u * u * t * p1Y + 3 * u * t * t * p2Y + t * t * t * liveChestY;
+
+                    // 💎 Keep the shiny glint locked onto the front face of the flying gem
+                    if (glint && glint.active) {
+                        glint.setPosition(gem.x - 3, gem.y - 4).setDepth(collectDepth + 1);
+                    }
+                    if (aura && aura.active) {
+                        aura.setPosition(gem.x, gem.y).setDepth(collectDepth - 1);
+                    }
+
+                    // ⚡ Shiny Shooting-Star Lead Streak + 2 Trailing Follower Embers
+                    frameCount++;
+                    if (frameCount % 3 === 0) {
+                        const moveAngle = Math.atan2(gem.y - prevY, gem.x - prevX);
+                        const cosA = Math.cos(moveAngle);
+                        const sinA = Math.sin(moveAngle);
+
+                        // 1. Existing Shiny Lead Streak (100% UNTOUCHED)
+                        const streak = this.add.ellipse(gem.x, gem.y, 10, 3, 0xeeffaa);
+                        streak.setRotation(moveAngle).setBlendMode(Phaser.BlendModes.ADD).setDepth(collectDepth);
+
+                        this.tweens.add({
+                            targets: streak,
+                            scaleX: 0.2,
+                            scaleY: 0.2,
+                            alpha: 0,
+                            duration: 200,
+                            ease: "Quad.easeOut",
+                            onComplete: () => streak.destroy()
+                        });
+
+                        // 2. ✨ 2 Follower Micro-Trails Tailing Behind the Lead Streak (Zero-Lag)
+                        [-1, 1].forEach((side) => {
+                            const trailX = gem.x - cosA * 7 + (-sinA * side * 3.5);
+                            const trailY = gem.y - sinA * 7 + (cosA * side * 3.5);
+
+                            const subTrail = this.add.ellipse(trailX, trailY, 6, 2, 0x55ff99);
+                            subTrail.setRotation(moveAngle).setBlendMode(Phaser.BlendModes.ADD).setDepth(collectDepth);
+
+                            this.tweens.add({
+                                targets: subTrail,
+                                scaleX: 0.1,
+                                scaleY: 0.1,
+                                alpha: 0,
+                                duration: 240,
+                                ease: "Quad.easeOut",
+                                onComplete: () => subTrail.destroy()
+                            });
+                        });
+                    }
+
+                    prevX = gem.x;
+                    prevY = gem.y;
+                },
+                onComplete: () => {
+                    // Clean up gem and its shiny glint on chest impact
+                    gem.destroy();
+                    if (glint && glint.active) glint.destroy();
+                    if (aura && aura.active) aura.destroy();
+
+                    this.backpack.addBiomass(amount);
+                    this.showFloatingText(this.player.x, this.player.y - 90, `+${amount} Biomass`, "#55ff55", 1800);
+
+                    // 💥 Dopamine Chest Burst on live player position
+                    const hitChestX = this.player.x;
+                    const hitChestY = this.player.y - (this.player.displayHeight * 0.45);
+
+                    const burst = this.add.circle(hitChestX, hitChestY, 12, 0x00ff88, 0.95);
+                    burst.setStrokeStyle(3.5, 0xffffff).setBlendMode(Phaser.BlendModes.ADD).setDepth(collectDepth);
+                    this.tweens.add({
+                        targets: burst,
+                        radius: 44,
+                        alpha: 0,
+                        duration: 180,
+                        ease: "Quad.easeOut",
+                        onComplete: () => burst.destroy()
+                    });
+
+                    // 💥 Debounced Haptic Shake
+                    if (!this.cameras.main.shakeEffect.isRunning) {
+                        this.cameras.main.shake(30, 0.001);
+                    }
+                }
+            });
+        });
+        this.data.set("biomassGroup", this.biomassGroup);
+
+        
+
+
+        this.trapManager = new TrapManager(this);
+        this.waveManager = new WaveManager(this);
+        this.createBuildBarUI();
 
         // 📦 Emergency Airdrop Button (Docked above Backpack button at 630, 550)
         const airdropX = 630;
@@ -136,30 +360,65 @@ export default class MainScene extends Phaser.Scene {
             }
 
             AdManager.getInstance().playAd("rewarded", (success: boolean) => {
-                if (success && this.backpack) {
-                    this.hasClaimedAirdropThisWave = true;
-                    this.backpack.addBiomass(3);
-                    this.backpack.addPepperSeeds(2);
-                    this.showFloatingText(this.player.x, this.player.y - 90, "📦 AIRDROP DELIVERED! (+3 Biomass & +2 Seeds)", "#55ff55", 3500);
+                if (success && this.player) {
+                    this.physics.world.resume();
+
+                    this.player.hp = 50;
+                    this.backpack.updateHP(50, this.player.maxHp);
+                    this.player.clearTint();
+                    this.player.setAlpha(1.0); // 👈 Guaranteed full visibility!
+                    this.player.setVisible(true);
+
+                    this.cameras.main.shake(200, 0.015);
+
+                    const blastRing = this.add.circle(this.player.x, this.player.y - 30, 15, 0x00ffff, 0.8);
+                    blastRing.setStrokeStyle(4, 0xffff00).setDepth(25000);
+                    this.tweens.add({
+                        targets: blastRing,
+                        radius: 160,
+                        alpha: 0,
+                        duration: 400,
+                        ease: "Cubic.easeOut",
+                        onComplete: () => blastRing.destroy()
+                    });
+
+                    if (this.waveManager) {
+                        const activeZombies = this.waveManager.getActiveZombies();
+                        activeZombies.forEach((zombie) => {
+                            const dist = Phaser.Math.Distance.Between(this.player.x, this.player.y - 30, zombie.x, zombie.y - (zombie.displayHeight / 2));
+                            if (dist <= 160) {
+                                const flingDir = new Phaser.Math.Vector2(zombie.x - this.player.x, zombie.y - this.player.y).normalize();
+                                zombie.takeDamage(10, flingDir, 350, "MELEE");
+                            }
+                        });
+                    }
+
+                    this.player.triggerReviveShield(3000);
+                    this.showFloatingText(this.player.x, this.player.y - 110, "⚡ REVIVED WITH 3s INVULNERABILITY SHIELD!", "#00ffff", 3000);
                 }
             });
         });
 
 
-        this.fenceManager = new FenceManager(this);
+        
         this.waveManager = new WaveManager(this);
 
-        // --- 1. SPAWN RUSTIC FARMSTEAD CLEARING & 3x3 FARM GRID ---
-        const gridCenterX = spawnX + 120;
+        // =========================================================================
+        // 🌾 1. UNIFIED RUSTIC FARMSTEAD YARD (Encloses Both Fields & Workshop!)
+        // =========================================================================
+        const gridCenterX = spawnX + 110;
         const gridCenterY = spawnY;
         const spacing = 40;
 
-        // 🌾 RUSTIC FARMSTEAD DIRT CLEARING (Underneath farm plots)
-        this.farmDirtClearing = this.add.ellipse(gridCenterX, gridCenterY + 20, 320, 260, 0x3d2714, 0.88);
+        // 🏡 Elongated organic farmyard (Width 520px x Height 290px covers ALL plots & benches!)
+        
+        // 🏡 100% Solid Opaque Farmstead Dirt Ground (Zero Grass Bleed-Through!)
+        // Rich Peat Loam (#3a2516) with soft natural soil border (#27170c)
+        this.farmDirtClearing = this.add.rectangle(spawnX + 30, spawnY + 20, 540, 310, 0x3a2516, 1.0);
         this.farmDirtClearing.setDepth(0);
-        this.farmDirtClearing.setStrokeStyle(4, 0x2b1a0c, 0.6);
+        this.farmDirtClearing.setStrokeStyle(3, 0x27170c, 0.85);
 
-        // Spawn 3x3 Plots & Scarecrow
+        // --- SPAWN 3x3 PEPPER FARM & SCARECROW TOTEM (East Wing) ---
         for (let row = -1; row <= 1; row++) {
             for (let col = -1; col <= 1; col++) {
                 const posX = gridCenterX + (col * spacing);
@@ -178,18 +437,18 @@ export default class MainScene extends Phaser.Scene {
             }
         }
 
-        // --- 2. SPAWN 3 DEDICATED HERB PLOTS ---
-        const herbStartX = spawnX - 100;
-        const herbStartY = spawnY;
+        // --- SPAWN 3 DEDICATED HERB PLOTS (West Wing inside the Yard!) ---
+        const herbStartX = spawnX - 85;
+        const herbStartY = spawnY - 40;
         for (let i = 0; i < 3; i++) {
             const isUnlocked = i === 0;
             const hPlot = new HerbPlot(this, herbStartX, herbStartY + (i * 40), isUnlocked);
             this.herbPlots.push(hPlot);
         }
 
-        // --- 3. SPAWN CRAFTING BENCH & SEED COMPOSTER ---
-        this.craftingBench = new CraftingBench(this, gridCenterX - 25, gridCenterY + 80);
-        this.seedComposter = new SeedComposter(this, gridCenterX + 25, gridCenterY + 80);
+        // --- SPAWN CRAFTING BENCH & SEED COMPOSTER (Workshop South) ---
+        this.craftingBench = new CraftingBench(this, spawnX + 10, gridCenterY + 95);
+        this.seedComposter = new SeedComposter(this, spawnX + 70, gridCenterY + 95);
 
         // Register Keyboard Controls
         if (this.input.keyboard) {
@@ -267,6 +526,25 @@ export default class MainScene extends Phaser.Scene {
             );
         }
 
+        // Bullets trigger Barrels / hit Solid Traps
+        if (this.trapManager?.solidTrapGroup) {
+            this.physics.add.overlap(
+                this.projectileGroup,
+                this.trapManager.solidTrapGroup,
+                (projObj, trapObj) => {
+                    const proj = projObj as SeedProjectile;
+                    const trapSprite = trapObj as Phaser.GameObjects.Sprite;
+                    const trapData = trapSprite?.getData("trapData");
+                    if (proj?.active && trapData && trapData.state === "INTACT") {
+                        if (trapData.type === "BARREL" && this.waveManager) {
+                            this.trapManager.detonateBarrel(trapData, this.waveManager.getActiveZombies());
+                        }
+                        proj.onHitObstacle("ROCK");
+                    }
+                }
+            );
+        }
+
         // ⚔️ 5. NATIVE ZERO-LAG MELEE HITBOX & OVERLAP
         this.meleeHitbox = this.physics.add.sprite(0, 0, "player", 0);
         this.meleeHitbox.setVisible(false).setActive(false);
@@ -300,18 +578,40 @@ export default class MainScene extends Phaser.Scene {
             );
         }
 
-        // --- 6. GHOST PREVIEW FOR FENCE PLACEMENT ---
-        this.fenceGhost = this.add.rectangle(0, 0, 36, 36, 0x55ff55, 0.4);
-        this.fenceGhost.setStrokeStyle(2, 0x00ff00);
-        this.fenceGhost.setDepth(25000).setVisible(false);
+        // Ghost Previews for Traps
+        this.ghostTrapBox = this.add.rectangle(0, 0, 36, 36, 0x55ff55, 0.4);
+        this.ghostTrapBox.setStrokeStyle(2, 0x00ff00).setDepth(25000).setVisible(false);
 
-        // --- 7. MOUSE CLICKS IN BUILD MODE ---
+        this.ghostRangeCircle = this.add.circle(0, 0, 180, 0xffaa00, 0.15);
+        this.ghostRangeCircle.setStrokeStyle(2, 0xffaa00, 0.8).setDepth(24999).setVisible(false);
+
+        // Scroll Wheel & Number Keys for Trap Switching
+        this.input.on("wheel", (_pointer: any, _gameObjects: any, _deltaX: number, deltaY: number) => {
+            if (this.isBuildBarOpen && this.backpack) {
+                if (deltaY > 0) {
+                    this.backpack.activeTrapSlot = this.backpack.activeTrapSlot === 3 ? 1 : ((this.backpack.activeTrapSlot + 1) as any);
+                } else {
+                    this.backpack.activeTrapSlot = this.backpack.activeTrapSlot === 1 ? 3 : ((this.backpack.activeTrapSlot - 1) as any);
+                }
+                this.updateBuildBarSlots();
+            }
+        });
+
+        const key1 = this.input.keyboard?.addKey(Phaser.Input.Keyboard.KeyCodes.ONE);
+        const key2 = this.input.keyboard?.addKey(Phaser.Input.Keyboard.KeyCodes.TWO);
+        const key3 = this.input.keyboard?.addKey(Phaser.Input.Keyboard.KeyCodes.THREE);
+
+        key1?.on("down", () => { if (this.isBuildBarOpen) { this.backpack.activeTrapSlot = 1; this.updateBuildBarSlots(); } });
+        key2?.on("down", () => { if (this.isBuildBarOpen && this.backpack.isSentryUnlocked) { this.backpack.activeTrapSlot = 2; this.updateBuildBarSlots(); } });
+        key3?.on("down", () => { if (this.isBuildBarOpen && this.backpack.isBarrelUnlocked) { this.backpack.activeTrapSlot = 3; this.updateBuildBarSlots(); } });
+
         this.input.on("pointerdown", (pointer: Phaser.Input.Pointer) => {
-            if (this.isPlacingFence) {
+            if (pointer.y >= 540) return; // 👈 Blocks world placement when clicking bottom HUD/buttons
+            if (this.isBuildBarOpen) {
                 if (pointer.button === 0 || pointer.leftButtonDown()) {
-                    this.placeFenceAtGhostCursor(pointer.worldX, pointer.worldY);
+                    this.handleBuildTrapClick(pointer.worldX, pointer.worldY);
                 } else if (pointer.button === 2 || pointer.rightButtonDown()) {
-                    this.removeFenceAtGhostCursor(pointer.worldX, pointer.worldY);
+                    this.handleDismantleTrapClick(pointer.worldX, pointer.worldY);
                 }
             }
         });
@@ -325,6 +625,34 @@ export default class MainScene extends Phaser.Scene {
         }
         if (this.fenceManager && this.fenceManager.fenceGroup) {
             this.physics.add.collider(this.player, this.fenceManager.fenceGroup);
+        }
+
+        // 🧱 Solid Trap Colliders (Player & Zombies collide with Barrels & Sentries)
+        if (this.trapManager && this.trapManager.solidTrapGroup) {
+            this.physics.add.collider(this.player, this.trapManager.solidTrapGroup);
+
+            if (this.waveManager && this.waveManager.zombieGroup) {
+                this.physics.add.collider(this.waveManager.zombieGroup, this.trapManager.solidTrapGroup, (zombieObj, trapObj) => {
+                    const zombie = zombieObj as Zombie;
+                    const trapSprite = trapObj as Phaser.GameObjects.Sprite;
+                    const trapData = trapSprite.getData("trapData");
+
+                    if (!zombie || !zombie.active || !trapData || trapData.state === "BROKEN") return;
+
+                    // 🧨 Barrel Touched by Zombie -> INSTANT DETONATION
+                    if (trapData.type === "BARREL") {
+                        this.trapManager.detonateBarrel(trapData, this.waveManager.getActiveZombies());
+                    } 
+                    // 🎃 Sentry Touched by Zombie -> Zombie chews on Sentry
+                    else if (trapData.type === "SENTRY") {
+                        const now = this.time.now;
+                        if (now - (trapData.lastZombieChewTime || 0) >= 800) {
+                            trapData.lastZombieChewTime = now;
+                            this.trapManager.damageSentry(trapData, 10);
+                        }
+                    }
+                });
+            }
         }
 
          // 👑 Top-Center Boss Health Bar (Zoom-Calibrated: 100% visible below Wave Banner!)
@@ -381,14 +709,23 @@ export default class MainScene extends Phaser.Scene {
 
         this.bossIntelGroup = [intelBg, intelTitle, this.bossIntelText];
 
+        const tabKey = this.input.keyboard?.addKey(Phaser.Input.Keyboard.KeyCodes.TAB);
+        tabKey?.on("down", () => {
+            if (this.backpack) {
+                this.backpack.toggleActiveSeed();
+                const activeName = this.backpack.activeSeedType === "pepper" ? "🌶️ Pepper Seeds" : "🎃 Pumpkin Seeds";
+                this.showFloatingText(this.player.x, this.player.y - 90, `Active Seed: ${activeName}`, "#ffaa00", 1200);
+            }
+        });
+
 
         new DebugManager(this, this.player, this.waveManager, this.backpack, this.farmPlots);
 
         this.cameras.main.startFollow(this.player);
         this.cameras.main.setZoom(1.25);
-        this.cameras.main.roundPixels = true; // 👈 STOPS subpixel camera vibration!
-        this.cameras.main.setBounds(0, 0, map.widthInPixels, map.heightInPixels);
-        this.physics.world.setBounds(0, 0, map.widthInPixels, map.heightInPixels);
+        this.cameras.main.roundPixels = true;
+        this.cameras.main.setBounds(0, 0, mapSize, mapSize);
+        this.physics.world.setBounds(0, 0, mapSize, mapSize);
 
         // 🌑 Atmospheric Camera Vignette (Soft shadow falloff on screen edges)
         if (this.cameras.main.postFX) {
@@ -398,10 +735,10 @@ export default class MainScene extends Phaser.Scene {
         // Top-Center Wave Banner
         this.waveText = this.add.text(600, 100, "WAVE 0 - PREP PHASE | Press [N] to Start Wave", {
             fontFamily: "Arial",
-            fontSize: "13px",
+            fontSize: "14px",
             color: "#ffcc00",
             stroke: "#000000",
-            strokeThickness: 3
+            strokeThickness: 4 // 👈 Thick black border so text is readable in Day & Night!
         }).setOrigin(0.5).setScrollFactor(0).setDepth(30000);
 
         // 🗺️ Ultra-Fast 60 FPS Radar Minimap
@@ -414,7 +751,9 @@ export default class MainScene extends Phaser.Scene {
         if (this.textures.exists("player_side")) {
             this.textures.get("player_side").setFilter(Phaser.Textures.FilterMode.LINEAR);
         }
-
+        if (this.textures.exists("zombie_walker")) {
+            this.textures.get("zombie_walker").setFilter(Phaser.Textures.FilterMode.LINEAR);
+        }
 
        // 🌙 VIEWPORT-LOCKED NIGHT OVERLAY (Covers 100% of camera viewport at Depth 25)
         const screenW = this.scale.width * 2;
@@ -546,44 +885,6 @@ export default class MainScene extends Phaser.Scene {
         return false;
     }
 
-    private handleFenceBuildMode() {
-        if (Phaser.Input.Keyboard.JustDown(this.fenceModeKey)) {
-            this.isPlacingFence = !this.isPlacingFence;
-            this.fenceGhost.setVisible(this.isPlacingFence);
-
-            if (this.isPlacingFence) {
-                this.showFloatingText(this.player.x, this.player.y - 90, "Build Mode: [L-Click] Place | [R-Click] Remove | [F] Exit", "#55ff55");
-            } else {
-                this.showFloatingText(this.player.x, this.player.y - 90, "Build Mode Exited", "#aaaaaa");
-            }
-        }
-
-        if (this.isPlacingFence) {
-            const pointer = this.input.activePointer;
-            const targetX = pointer.worldX;
-            const targetY = pointer.worldY;
-
-            const gridX = Math.floor(targetX / 40);
-            const gridY = Math.floor(targetY / 40);
-            const snappedX = gridX * 40 + 20;
-            const snappedY = gridY * 40 + 20;
-
-            this.fenceGhost.setPosition(snappedX, snappedY);
-
-            const existingFence = this.fenceManager.getFenceAtWorldPos(targetX, targetY);
-            const isBlockedByStructure = this.isTileOccupiedByStructure(snappedX, snappedY);
-
-            if (existingFence && existingFence.state === "INTACT") {
-                this.fenceGhost.setFillStyle(0xffaa00, 0.4);
-            } else if (existingFence && existingFence.state === "BROKEN") {
-                this.fenceGhost.setFillStyle(0xcc2222, 0.5);
-            } else if (isBlockedByStructure) {
-                this.fenceGhost.setFillStyle(0xff2222, 0.4);
-            } else {
-                this.fenceGhost.setFillStyle(0x55ff55, 0.4);
-            }
-        }
-    }
 
     public onPlayerDeath() {
         this.physics.world.pause();
@@ -725,13 +1026,30 @@ export default class MainScene extends Phaser.Scene {
     // 💀 EXTRACTION TAX: 35% with Minimum Floor of 2 Biomass
     private resetToFarmAfterDefeat() {
         this.backpack.biomassCount = Math.max(2, Math.floor(this.backpack.biomassCount * 0.65));
+        this.backpack.pepperSeeds = Math.max(2, this.backpack.pepperSeeds);
         this.player.hp = 100;
         this.backpack.updateHP(100, this.player.maxHp);
         this.player.clearTint();
-        this.setNightLighting(false); // Reset to day if defeated
+        this.player.setAlpha(1.0);
 
-        const spawnObj = this.world.map.findObject("objects", (obj) => obj.name === "PlayerSpawn");
-        this.player.setPosition(spawnObj?.x ?? 1600, spawnObj?.y ?? 1600);
+        // 🗡️ GUARANTEED PITCHFORK & SHADOW RESTORE ON DEFEAT:
+        if (this.player.pitchforkSprite) {
+            this.player.pitchforkSprite.setVisible(true);
+            this.player.isMeleeSwinging = false;
+        }
+        if ((this.player as any).groundShadow) {
+            (this.player as any).groundShadow.setVisible(true);
+        }
+
+        // ☀️ Restore World Colors from Grayscale:
+        if (this.cameras.main.postFX) {
+            this.cameras.main.postFX.clear();
+            this.cameras.main.postFX.addVignette(0.5, 0.5, 0.82, 0.45);
+        }
+
+        const spawnX = 3072 / 2;
+        const spawnY = 3072 / 2;
+        this.player.setPosition(spawnX, spawnY);
 
         if (this.waveManager) {
             this.waveManager.onWaveFailed();
@@ -749,6 +1067,10 @@ export default class MainScene extends Phaser.Scene {
         return costs[Math.max(0, index)];
     }
 
+    public registerRootSpore(spore: Phaser.GameObjects.Arc) {
+        this.rootSpores.push(spore);
+    }
+
     update(time: number, delta: number) {
         if (this.player && this.player.active) {
             // 🌟 Sits ABOVE the night overlay so the farmer stays 100% bright & saturated!
@@ -756,8 +1078,42 @@ export default class MainScene extends Phaser.Scene {
             this.player.update(delta);
         }
 
-        this.checkLootPickup();
-        this.handleFenceBuildMode();
+        // 🌿 Instant Root Spore Pickup [Q Charge]
+        if (this.rootSpores.length > 0 && this.player) {
+            for (let i = this.rootSpores.length - 1; i >= 0; i--) {
+                const spore = this.rootSpores[i];
+                if (!spore || !spore.active) {
+                    this.rootSpores.splice(i, 1);
+                    continue;
+                }
+
+                const dist = Phaser.Math.Distance.Between(this.player.x, this.player.y - 20, spore.x, spore.y);
+                if (dist <= 42) {
+                    spore.destroy();
+                    this.rootSpores.splice(i, 1);
+
+                    this.backpack.addRootCharge(1);
+                    this.showFloatingText(this.player.x, this.player.y - 90, "🌿 ROOT SPORE! +1 [Q] READY", "#55ff55", 2500);
+
+                    // Additive green energy burst on player
+                    const ring = this.add.circle(this.player.x, this.player.y - 20, 12, 0x33ff66, 0.9);
+                    ring.setStrokeStyle(3, 0xaaffaa).setBlendMode(Phaser.BlendModes.ADD).setDepth(25000);
+                    this.tweens.add({
+                        targets: ring,
+                        radius: 65,
+                        alpha: 0,
+                        duration: 300,
+                        ease: "Quad.easeOut",
+                        onComplete: () => ring.destroy()
+                    });
+                }
+            }
+        }
+
+        this.handleBuildBarToggle();
+        if (this.trapManager && this.waveManager) {
+            this.trapManager.updateTraps(delta, this.waveManager.getActiveZombies());
+        }
         this.handleHealHotkey();
 
         this.farmPlots.forEach(plot => plot.updatePlot(delta));
@@ -814,6 +1170,26 @@ export default class MainScene extends Phaser.Scene {
                             const b = r.body as Phaser.Physics.Arcade.StaticBody;
                             if (pBox.right >= b.x && pBox.left <= b.right && pBox.bottom >= b.y && pBox.top <= b.bottom) {
                                 proj.onHitObstacle("ROCK");
+                                hitTarget = true;
+                                break;
+                            }
+                        }
+                    }
+                }
+                if (hitTarget || !proj.active) continue;
+
+                // D. Hit Solid Traps (Barrels / Sentries)
+                if (this.trapManager && this.trapManager.solidTrapGroup) {
+                    for (const trapObj of this.trapManager.solidTrapGroup.getChildren()) {
+                        const t = trapObj as Phaser.GameObjects.Sprite;
+                        const trapData = t.getData("trapData");
+                        if (t && t.body && trapData && trapData.state === "INTACT") {
+                            const b = t.body as Phaser.Physics.Arcade.StaticBody;
+                            if (pBox.right >= b.x && pBox.left <= b.right && pBox.bottom >= b.y && pBox.top <= b.bottom) {
+                                if (trapData.type === "BARREL" && this.waveManager) {
+                                    this.trapManager.detonateBarrel(trapData, this.waveManager.getActiveZombies());
+                                }
+                                proj.onHitObstacle("ROCK");
                                 break;
                             }
                         }
@@ -866,6 +1242,7 @@ export default class MainScene extends Phaser.Scene {
             const isWave5Prep = !this.waveManager.isWaveActive && (this.waveManager.currentWave === 4 || (this.waveManager.currentWave === 5 && this.waveManager.wasWaveDefeated));
 
             if (isWave5Prep) {
+                this.setNightLighting(false); // 👈 ADD THIS: Forces Day/Morning Sun during Boss Prep!
                 this.bossIntelGroup.forEach(el => (el as any).setVisible(true));
 
                 const hasTotemLvl2 = this.scarecrow.level >= 2;
@@ -905,8 +1282,12 @@ export default class MainScene extends Phaser.Scene {
             this.waveText.setColor("#ffcc00");
 
             // 🌾 Signal Seed Composter & Show Victory Modal
-            if (!this.seedComposter.isUnlocked && !this.seedComposter.visible) {
-                this.seedComposter.signalUnlockReady();
+            if (this.seedComposter && !this.seedComposter.isUnlocked && !this.seedComposter.visible) {
+                if (typeof (this.seedComposter as any).signalUnlockReady === "function") {
+                    this.seedComposter.signalUnlockReady();
+                } else {
+                    this.seedComposter.setVisible(true).setTint(0xffcc00);
+                }
                 this.showAct1VictoryModal();
             }
         } else if (this.waveManager.currentWave > 0 && !this.waveManager.isWaveActive) {
@@ -915,6 +1296,19 @@ export default class MainScene extends Phaser.Scene {
             this.waveText.setColor("#55ff55");
         }
             }
+        }
+
+        // 🔓 Wave Unlock Gates for Offensive Traps
+        if (this.waveManager && this.waveManager.currentWave === 2 && !this.waveManager.isWaveActive && !this.backpack.isBarrelUnlocked) {
+            this.backpack.isBarrelUnlocked = true;
+            this.showFloatingText(this.player.x, this.player.y - 110, "🧨 PEPPER BARRELS UNLOCKED! [Build Bar: F]", "#ff3300", 4000);
+        }
+
+        if (this.waveManager && this.waveManager.currentWave === 3 && !this.waveManager.isWaveActive && !this.hasRewardedPumpkins) {
+            this.hasRewardedPumpkins = true;
+            this.backpack.isSentryUnlocked = true;
+            this.backpack.addPumpkinSeeds(2);
+            this.showFloatingText(this.player.x, this.player.y - 110, "🎃 PUMPKIN SENTRY & SEEDS UNLOCKED! [Build Bar: F]", "#ff7700", 4000);
         }
 
         // 👟 4. Wave 4 Clear Reward: UNLOCK COMBAT DODGE ROLL & STAMINA UI!
@@ -1055,23 +1449,23 @@ export default class MainScene extends Phaser.Scene {
         // 3. Central Scarecrow Totem Check
         if (this.scarecrow && this.isPlayerTouching(this.scarecrow)) {
             const waveNum = this.waveManager ? this.waveManager.currentWave : 0;
-            this.scarecrow.showPrompt(waveNum);
+            this.scarecrow.showPrompt(waveNum, this.farmPlots, this.backpack.biomassCount);
             return;
         }
-
         // Farm Plots Check
         for (const plot of this.farmPlots) {
             if (this.isPlayerTouching(plot)) {
                 const cost = this.getNextPlotUnlockCost();
-                plot.showPrompt(this.backpack.biomassCount, this.backpack.pepperSeeds, cost);
+                const activeSeed = this.backpack.activeSeedType;
+                const seedCount = activeSeed === "pepper" ? this.backpack.pepperSeeds : this.backpack.pumpkinSeeds;
+                plot.showPrompt(this.backpack.biomassCount, activeSeed, seedCount, cost);
                 return;
             }
         }
-
         // Herb Plots Check
         for (const hPlot of this.herbPlots) {
             if (this.isPlayerTouching(hPlot)) {
-                hPlot.showPrompt(this.backpack.pepperSeeds, isWaveActive);
+                hPlot.showPrompt(this.backpack.biomassCount, isWaveActive);
                 return;
             }
         }
@@ -1079,41 +1473,72 @@ export default class MainScene extends Phaser.Scene {
     }
 
     private handleFarmingInteraction() {
-        if (!this.player || !this.player.body || this.isPlacingFence) return;
+        if (!this.player || !this.player.body || this.isBuildBarOpen) return;
 
         const isEJustDown = Phaser.Input.Keyboard.JustDown(this.interactKey);
+        const isEHeld = this.interactKey.isDown;
         const isUJustDown = Phaser.Input.Keyboard.JustDown(this.upgradeKey);
 
-        if (!isEJustDown && !isUJustDown) return;
+        if (!isEJustDown && !isEHeld && !isUJustDown) return;
 
         if (this.waveManager && this.waveManager.isWaveActive) {
-            this.showFloatingText(this.player.x, this.player.y - 90, "Farming Locked During Active Wave!", "#ff3333");
+            if (isEJustDown) {
+                this.showFloatingText(this.player.x, this.player.y - 90, "Farming Locked During Active Wave!", "#ff3333");
+            }
             return;
         }
 
-        // 1. Rebuild Ruins
-        if (isEJustDown && this.fenceManager.hasNearbyBrokenRuins(this.player.x, this.player.y)) {
-            const rebuilt = this.fenceManager.rebuildNearbyBrokenFences(this.player.x, this.player.y, this.backpack);
+        // =========================================================================
+        // 🌾 1. STREAM-PLANTING ENGINE (Hold [E] & Walk across Empty Plots)
+        // =========================================================================
+        if (isEHeld) {
+            for (const plot of this.farmPlots) {
+                // Blocks auto-sowing if the plot was just harvested in the same keypress
+                if (this.isPlayerTouching(plot) && plot.isUnlocked && plot.state === CropState.EMPTY && plot.harvestsLeft > 0 && this.time.now > plot.lastHarvestTime) {
+
+                    const activeSeed = this.backpack.activeSeedType;
+                    if (activeSeed === "pepper" && this.backpack.pepperSeeds > 0) {
+                        this.backpack.addPepperSeeds(-1);
+                        plot.plantSeed("pepper");
+                        this.showFloatingText(plot.x, plot.y - 30, "Pepper Planted! 🌶️", "#55ff55", 800);
+                    } else if (activeSeed === "pumpkin" && this.backpack.pumpkinSeeds > 0) {
+                        this.backpack.addPumpkinSeeds(-1);
+                        plot.plantSeed("pumpkin");
+                        this.showFloatingText(plot.x, plot.y - 30, "Pumpkin Planted! 🎃", "#ff7700", 800);
+                    }
+                }
+            }
+        }
+
+        // =========================================================================
+        // 🔨 2. REBUILD RUINS (Single Tap [E])
+        // =========================================================================
+        if (isEJustDown && (this as any).fenceManager && (this as any).fenceManager.hasNearbyBrokenRuins(this.player.x, this.player.y)) {
+            const rebuilt = (this as any).fenceManager.rebuildNearbyBrokenFences(this.player.x, this.player.y, this.backpack);
             if (rebuilt > 0) {
-                this.showFloatingText(this.player.x, this.player.y - 90, `Rebuilt +${rebuilt} Fences! (-1 Biomass)`, "#55ff55");
+                this.showFloatingText(this.player.x, this.player.y - 90, `Rebuilt +${rebuilt} Defenses! (-1 Biomass)`, "#55ff55");
                 return;
             }
         }
 
-        // 2. Crafting Bench Interaction
+        // =========================================================================
+        // 🪵 3. CRAFTING BENCH (Single Tap [E])
+        // =========================================================================
         if (this.craftingBench && this.isPlayerTouching(this.craftingBench)) {
             if (isEJustDown) {
                 const success = this.craftingBench.craftFence(this.backpack);
                 if (success) {
-                    this.showFloatingText(this.craftingBench.x, this.craftingBench.y - 30, "+1 Fence Crafted! [Press F to Place]", "#55ff55");
+                    this.showFloatingText(this.craftingBench.x, this.craftingBench.y - 30, "+1 Defense Crafted! [Press F to Place]", "#55ff55");
                 } else {
-                    this.showFloatingText(this.craftingBench.x, this.craftingBench.y - 30, "Need 2 Biomass to Craft Fence!", "#ff5555");
+                    this.showFloatingText(this.craftingBench.x, this.craftingBench.y - 30, "Need 1 Biomass to Craft!", "#ff5555");
                 }
             }
             return;
         }
 
-        // 3. Seed Composter Interaction
+        // =========================================================================
+        // 🌾 4. SEED COMPOSTER (Single Tap [E])
+        // =========================================================================
         if (this.seedComposter && this.seedComposter.visible && this.isPlayerTouching(this.seedComposter)) {
             if (isEJustDown) {
                 if (!this.seedComposter.isUnlocked) {
@@ -1131,21 +1556,44 @@ export default class MainScene extends Phaser.Scene {
             return;
         }
 
-        // 4. Scarecrow Totem Interaction
+        // =========================================================================
+        // 👑 5. SCARECROW TOTEM (Single Tap [E] Priority Harvest -> Slurry Pulse)
+        // =========================================================================
         if (this.scarecrow && this.isPlayerTouching(this.scarecrow)) {
             if (isEJustDown) {
-                const yieldData = this.scarecrow.vacuumHarvestAll(this.farmPlots, this.backpack, this);
-                if (yieldData.totalAmmo > 0 || yieldData.totalSeeds > 0) {
-                    for (let i = 0; i < yieldData.totalAmmo; i++) {
-                        this.backpack.recordHarvest();
-                    }
+                // Priority 1: Vacuum Harvest if any crops are ready
+                if (this.scarecrow.hasMatureCrops(this.farmPlots)) {
+                    const yieldData = this.scarecrow.vacuumHarvestAll(this.farmPlots, this.backpack, this);
+                    if (yieldData.totalAmmo > 0 || yieldData.totalSeeds > 0 || yieldData.totalPumpkins > 0) {
+                        for (let i = 0; i < yieldData.totalAmmo; i++) {
+                            this.backpack.recordHarvest();
+                        }
 
-                    this.showFloatingText(
-                        this.scarecrow.x, 
-                        this.scarecrow.y - 30, 
-                        `+${yieldData.totalAmmo} Ammo | +${yieldData.totalSeeds} Seeds`, 
-                        "#ffaa00"
-                    );
+                        const pumpkinStr = yieldData.totalPumpkins > 0 ? ` | +${yieldData.totalPumpkins} Pumpkins` : "";
+                        this.showFloatingText(
+                            this.scarecrow.x, 
+                            this.scarecrow.y - 30, 
+                            `+${yieldData.totalAmmo} Ammo | +${yieldData.totalSeeds} Seeds${pumpkinStr}`, 
+                            "#ffaa00"
+                        );
+                    }
+                }
+                // Priority 2: Slurry Pulse if soil is depleted
+                else if (this.scarecrow.getDepletedPlots(this.farmPlots).length > 0) {
+                    if (this.backpack.biomassCount > 0) {
+                        const refilled = this.scarecrow.slurryPulse(this.farmPlots, this.backpack, this);
+                        this.showFloatingText(
+                            this.scarecrow.x,
+                            this.scarecrow.y - 30,
+                            `🌿 Slurry Pulse: Refilled ${refilled} Plot${refilled > 1 ? "s" : ""}! (-${refilled} Biomass)`,
+                            "#55ff55",
+                            2200
+                        );
+                    } else {
+                        this.showFloatingText(this.scarecrow.x, this.scarecrow.y - 30, "Need Biomass to Refill Soil!", "#ff5555");
+                    }
+                } else {
+                    this.showFloatingText(this.scarecrow.x, this.scarecrow.y - 30, "All Soil is Fresh!", "#ffff55");
                 }
             }
 
@@ -1168,23 +1616,20 @@ export default class MainScene extends Phaser.Scene {
             return;
         }
 
-        // 5. Herb Plots Interaction
+        // =========================================================================
+        // 🌿 6. HERB PLOTS (Single Tap [E])
+        // =========================================================================
         for (const hPlot of this.herbPlots) {
             if (this.isPlayerTouching(hPlot)) {
                 if (isEJustDown) {
-                    if (!hPlot.isUnlocked && this.backpack.pepperSeeds >= 4) {
-                        this.backpack.addPepperSeeds(-4);
+                    if (!hPlot.isUnlocked && this.backpack.biomassCount >= 3) {
+                        this.backpack.addBiomass(-3);
                         hPlot.unlockHerbPlot();
-                        this.showFloatingText(hPlot.x, hPlot.y - 30, "Herb Plot Unlocked! (-4 Seeds)", "#55ff55");
-                    } else if (hPlot.isUnlocked && hPlot.state === HerbState.EMPTY) {
-                        // 🛡️ REJECTS IF SEEDS <= 2 (Prevents Pepper Farm Softlocks!)
-                        if (this.backpack.pepperSeeds > 2) {
-                            this.backpack.addPepperSeeds(-2);
-                            hPlot.plantHerb();
-                            this.showFloatingText(hPlot.x, hPlot.y - 30, "Heal Herb Cultivated! (-2 Seeds)", "#55ff55");
-                        } else {
-                            this.showFloatingText(hPlot.x, hPlot.y - 30, "Must keep at least 2 seeds for Pepper Farm!", "#ffaa00");
-                        }
+                        this.showFloatingText(hPlot.x, hPlot.y - 30, "Herb Bed Unlocked!", "#55ff55");
+                    } else if (hPlot.isUnlocked && hPlot.state === HerbState.EMPTY && this.backpack.biomassCount >= 1) {
+                        this.backpack.addBiomass(-1);
+                        hPlot.plantHerb();
+                        this.showFloatingText(hPlot.x, hPlot.y - 30, "Heal Herb Planted! (-1 Biomass)", "#55ff55");
                     } else if (hPlot.isUnlocked && hPlot.state === HerbState.MATURE) {
                         const harvested = hPlot.harvestHerb();
                         if (harvested) {
@@ -1198,7 +1643,9 @@ export default class MainScene extends Phaser.Scene {
             }
         }
 
-        // 6. Pepper Farm Plots Interaction
+        // =========================================================================
+        // 🌶️ 7. MANUAL FARM PLOT INTERACTION (Single Tap [E] Unlock / Fertilize / Harvest)
+        // =========================================================================
         if (isEJustDown) {
             for (const plot of this.farmPlots) {
                 if (this.isPlayerTouching(plot)) {
@@ -1208,21 +1655,36 @@ export default class MainScene extends Phaser.Scene {
                         this.backpack.addBiomass(-unlockCost);
                         plot.unlockPlot();
                         this.showFloatingText(plot.x, plot.y - 30, `Plot Unlocked! (-${unlockCost} Biomass)`, "#55ff55");
-                    } else if (plot.isUnlocked && plot.fertility <= 0 && this.backpack.biomassCount > 0) {
+                    } else if (plot.isUnlocked && plot.harvestsLeft <= 0 && this.backpack.biomassCount > 0) {
                         this.backpack.addBiomass(-1);
                         plot.fertilizeSoil();
-                        this.showFloatingText(plot.x, plot.y - 30, "Soil Fertilized! (+100%)", "#55ff55");
-                    } else if (plot.isUnlocked && plot.state === CropState.EMPTY && plot.fertility > 0 && this.backpack.pepperSeeds > 0) {
-                        this.backpack.addPepperSeeds(-1);
-                        plot.plantSeed("pepper");
-                        this.showFloatingText(plot.x, plot.y - 30, "Pepper Planted!", "#55ff55");
+                        this.showFloatingText(plot.x, plot.y - 30, `Soil Fertilized! (${plot.maxHarvests}/${plot.maxHarvests})`, "#55ff55");
+                    } else if (plot.isUnlocked && plot.state === CropState.EMPTY && plot.harvestsLeft > 0) {
+                        const activeSeed = this.backpack.activeSeedType;
+                        if (activeSeed === "pepper" && this.backpack.pepperSeeds > 0) {
+                            this.backpack.addPepperSeeds(-1);
+                            plot.plantSeed("pepper");
+                            this.showFloatingText(plot.x, plot.y - 30, "Pepper Planted! 🌶️", "#55ff55");
+                        } else if (activeSeed === "pumpkin" && this.backpack.pumpkinSeeds > 0) {
+                            this.backpack.addPumpkinSeeds(-1);
+                            plot.plantSeed("pumpkin");
+                            this.showFloatingText(plot.x, plot.y - 30, "Pumpkin Planted! 🎃", "#ff7700");
+                        } else {
+                            this.showFloatingText(plot.x, plot.y - 30, `No ${activeSeed === "pepper" ? "Pepper" : "Pumpkin"} Seeds!`, "#ff5555");
+                        }
                     } else if (plot.isUnlocked && plot.state === CropState.MATURE) {
                         const yieldData = plot.harvest();
                         if (yieldData) {
-                            this.backpack.addPepperAmmo(yieldData.ammo);
-                            this.backpack.addPepperSeeds(yieldData.seeds);
+                            if (yieldData.ammo > 0) this.backpack.addPepperAmmo(yieldData.ammo);
+                            if (yieldData.seeds > 0) this.backpack.addPepperSeeds(yieldData.seeds);
+                            if (yieldData.pumpkins > 0) this.backpack.addIronPumpkins(yieldData.pumpkins);
+                            if (yieldData.pumpkinSeeds > 0) this.backpack.addPumpkinSeeds(yieldData.pumpkinSeeds);
                             this.backpack.recordHarvest();
-                            this.showFloatingText(plot.x, plot.y - 30, `+${yieldData.ammo} Pepper Ammo | +${yieldData.seeds} Seeds`, "#ffaa00");
+                            
+                            const msg = yieldData.pumpkins > 0 
+                                ? `+1 Iron Pumpkin | +${yieldData.pumpkinSeeds} Seeds` 
+                                : `+${yieldData.ammo} Pepper Ammo | +${yieldData.seeds} Seeds`;
+                            this.showFloatingText(plot.x, plot.y - 30, msg, "#ffaa00");
                         }
                     }
                     break;
@@ -1272,18 +1734,7 @@ export default class MainScene extends Phaser.Scene {
     }
 
     private checkLootPickup() {
-        const children = this.children.getChildren();
-        children.forEach((child) => {
-            if (child.getData("type") === "biomass") {
-                if (this.physics.overlap(this.player, child)) {
-                    const amount = child.getData("amount") || 1;
-                    this.backpack.addBiomass(amount);
-                    
-                    this.showFloatingText(this.player.x, this.player.y - 90, `+${amount} Biomass`, "#55ff55", 2200);
-                    child.destroy();
-                }
-            }
-        });
+        // Handled automatically by native physics overlap callback with 0 CPU overhead!
     }
 
     public showFloatingText(x: number, y: number, text: string, color: string = "#ffffff", duration: number = 2800) {
@@ -1306,73 +1757,174 @@ export default class MainScene extends Phaser.Scene {
     }
 
     private triggerRootBurst() {
-        // 🛑 LOCKOUT: Dead players cannot cast Root-Burst!
         if (!this.player || this.player.hp <= 0) return;
+
         const currentTime = this.time.now;
-        if (currentTime - this.lastRootBurstTime < 1000) return; // 1s Safety Buffer
+        if (currentTime - this.lastRootBurstTime < 1000) return;
 
         if (this.backpack.rootCharges <= 0) {
             this.showFloatingText(this.player.x, this.player.y - 90, "No Root Burst Charges! (Harvest Crops)", "#ffaa00");
             return;
         }
 
-        if (this.player && this.player.triggerCombatStance) {
-        this.player.triggerCombatStance(450); // Snaps to side combat stance towards cursor for 0.45s!
-    }
-
         this.backpack.consumeRootCharge();
         this.lastRootBurstTime = currentTime;
 
-        // 60ms Hit-stop Freeze & Heavy Shake
-        this.triggerHitStop(60);
-        this.cameras.main.shake(120, 0.008);
+        if (this.player && this.player.triggerCombatStance) {
+            this.player.triggerCombatStance(500);
+        }
 
-        const aoeRadius = 110;
+        this.triggerHitStop(70);
+        this.cameras.main.shake(160, 0.01);
+
+        const aoeRadius = 125;
         const burstDamage = 45;
         const burstX = this.player.x;
         const burstY = this.player.y - 20;
 
-        // Visual 360° Root Spikes Ring
-        const ring = this.add.circle(burstX, burstY, 10, 0x44aa33, 0.6);
-        ring.setStrokeStyle(4, 0x88ff44).setDepth(25000);
-
+        // =========================================================================
+        // 💥 1. ADDITIVE EMERALD SOLAR FLASH & RADIAL SHOCKWAVE
+        // =========================================================================
+        const shockwave = this.add.circle(burstX, burstY, 16, 0x11aa33, 0.85);
+        shockwave.setStrokeStyle(5, 0x88ff44).setBlendMode(Phaser.BlendModes.ADD).setDepth(25002);
         this.tweens.add({
-            targets: ring,
+            targets: shockwave,
             radius: aoeRadius,
             alpha: 0,
-            duration: 350,
-            ease: "Quad.easeOut",
-            onComplete: () => ring.destroy()
+            duration: 520,
+            ease: "Expo.easeOut",
+            onComplete: () => shockwave.destroy()
         });
 
-        // Spawn 16 Thorny Root Spike Particles
-        for (let i = 0; i < 16; i++) {
-            const angle = Phaser.Math.DegToRad(i * (360 / 16));
-            const spikeDist = Phaser.Math.Between(30, aoeRadius);
-            const spikeX = burstX + Math.cos(angle) * spikeDist;
-            const spikeY = burstY + Math.sin(angle) * spikeDist;
+        const coreFlash = this.add.circle(burstX, burstY, 20, 0xffffff, 0.95);
+        coreFlash.setBlendMode(Phaser.BlendModes.ADD).setDepth(25003);
+        this.tweens.add({
+            targets: coreFlash,
+            radius: 55,
+            alpha: 0,
+            duration: 250,
+            ease: "Quad.easeOut",
+            onComplete: () => coreFlash.destroy()
+        });
 
-            const spike = this.add.rectangle(spikeX, spikeY, 8, 20, 0x553311);
-            spike.setRotation(angle + Math.PI / 2).setDepth(spikeY);
+        // =========================================================================
+        // 🌿 2. 8-STREAM WAVING ROOT TENDRILS (Brown ➔ Green Gradient, Zero Gaps!)
+        // =========================================================================
+        const numBranches = 8;
+        const nodesPerBranch = 14; // Seamless overlapping chain
+
+        for (let b = 0; b < numBranches; b++) {
+            const baseAngle = (b / numBranches) * Math.PI * 2 + Phaser.Math.FloatBetween(-0.08, 0.08);
+            const perpAngle = baseAngle + Math.PI / 2;
+            const maxReach = aoeRadius * Phaser.Math.FloatBetween(0.9, 1.05);
+
+            for (let s = 1; s <= nodesPerBranch; s++) {
+                const progress = s / nodesPerBranch; // 0 to 1
+                const dist = progress * maxReach;
+
+                // 🌊 Wavy sine oscillation along flight vector
+                const waveOffset = Math.sin(progress * Math.PI * 2.8) * (14 * (1 - progress * 0.25));
+                const nodeX = burstX + Math.cos(baseAngle) * dist + Math.cos(perpAngle) * waveOffset;
+                const nodeY = burstY + Math.sin(baseAngle) * dist + Math.sin(perpAngle) * waveOffset;
+
+                // Tapered thickness: thick at root (13px), needle at tip (4px)
+                const nodeSize = Phaser.Math.Linear(13, 4, progress);
+
+                // 🎨 4-Tier Brown-to-Emerald Gradient
+                let nodeColor = 0x3d2314; // Bark brown base
+                if (progress > 0.25 && progress <= 0.55) nodeColor = 0x1e5f18; // Deep moss
+                else if (progress > 0.55 && progress <= 0.82) nodeColor = 0x22cc44; // Vivid emerald
+                else if (progress > 0.82) nodeColor = 0x99ff33; // Glowing lime tip
+
+                const isTip = progress > 0.80;
+                const node = this.add.circle(nodeX, nodeY, nodeSize / 2, nodeColor, isTip ? 1.0 : 0.92);
+                if (isTip) node.setBlendMode(Phaser.BlendModes.ADD);
+                node.setDepth(nodeY);
+
+                // Staggered surge: Tendril shoots out progressively like a living serpent
+                node.setScale(0.2);
+                this.tweens.add({
+                    targets: node,
+                    scale: 1.0,
+                    delay: s * 16, // 👈 Staggers expansion outward
+                    duration: 180,
+                    ease: "Back.easeOut",
+                    onComplete: () => {
+                        // Lingers visible, then gracefully withers into earth spores
+                        this.tweens.add({
+                            targets: node,
+                            scaleX: 0.2,
+                            scaleY: 0.2,
+                            alpha: 0,
+                            delay: 240,
+                            duration: 380,
+                            ease: "Quad.easeIn",
+                            onComplete: () => node.destroy()
+                        });
+                    }
+                });
+            }
+        }
+
+        // =========================================================================
+        // ✨ 3. SWIRLING NATURE LEAF & SPORE WISPS (Peeling off wave edges)
+        // =========================================================================
+        for (let l = 0; l < 18; l++) {
+            const leafAngle = Phaser.Math.FloatBetween(0, Math.PI * 2);
+            const leafDist = Phaser.Math.Between(25, aoeRadius * 0.85);
+            const lx = burstX + Math.cos(leafAngle) * leafDist;
+            const ly = burstY + Math.sin(leafAngle) * (leafDist * 0.7);
+
+            const leafColor = l % 2 === 0 ? 0x33ff66 : 0xaaff33;
+            const leaf = this.add.ellipse(lx, ly, Phaser.Math.Between(7, 11), 3.5, leafColor, 0.95);
+            leaf.setRotation(leafAngle).setBlendMode(Phaser.BlendModes.ADD).setDepth(25001);
 
             this.tweens.add({
-                targets: spike,
-                scaleY: 1.8,
+                targets: leaf,
+                x: lx + Math.cos(leafAngle + 1.0) * Phaser.Math.Between(25, 55),
+                y: ly + Math.sin(leafAngle + 1.0) * Phaser.Math.Between(15, 35) - Phaser.Math.Between(25, 50),
+                rotation: leafAngle + 3.0,
+                scale: 0.1,
                 alpha: 0,
-                duration: 400,
-                onComplete: () => spike.destroy()
+                duration: Phaser.Math.Between(850, 1300),
+                ease: "Cubic.easeOut",
+                onComplete: () => leaf.destroy()
             });
         }
 
+        // =========================================================================
+        // 🌿 4. RADIANT GROUND FISSURE DECAL (Depth 2 on Grass)
+        // =========================================================================
+        const fissureGfx = this.add.graphics().setDepth(2);
+        fissureGfx.lineStyle(3, 0x44ee55, 0.65);
+        fissureGfx.beginPath();
+        for (let f = 0; f < 6; f++) {
+            const fAngle = (f / 6) * Math.PI * 2 + Phaser.Math.FloatBetween(-0.2, 0.2);
+            const len = Phaser.Math.Between(30, 60);
+            fissureGfx.moveTo(burstX, burstY + 16);
+            fissureGfx.lineTo(burstX + Math.cos(fAngle) * (len * 0.5), burstY + 16 + Math.sin(fAngle) * (len * 0.3));
+            fissureGfx.lineTo(burstX + Math.cos(fAngle) * len, burstY + 16 + Math.sin(fAngle) * (len * 0.6));
+        }
+        fissureGfx.strokePath();
+
+        this.tweens.add({
+            targets: fissureGfx,
+            alpha: 0,
+            delay: 400,
+            duration: 1600,
+            ease: "Quad.easeOut",
+            onComplete: () => fissureGfx.destroy()
+        });
+
         this.showFloatingText(burstX, burstY - 60, "🌿 ROOT-BURST CLEAVE!", "#55ff55", 1500);
 
-        // Damage All Zombies in 110px Radius
+        // Damage & Knockback to Zombies
         const activeZombies = this.waveManager.getActiveZombies();
         activeZombies.forEach((zombie) => {
             const dist = Phaser.Math.Distance.Between(burstX, burstY, zombie.x, zombie.y - (zombie.displayHeight / 2));
             if (dist <= aoeRadius) {
                 const knockbackDir = new Phaser.Math.Vector2(zombie.x - burstX, zombie.y - burstY).normalize();
-                zombie.takeDamage(burstDamage, knockbackDir, 320, "MELEE");
+                zombie.takeDamage(burstDamage, knockbackDir, 360, "MELEE");
             }
         });
     }
@@ -1439,61 +1991,153 @@ export default class MainScene extends Phaser.Scene {
         if (this.isNightActive === isNight) return;
         this.isNightActive = isNight;
 
-        // 🌙 Midnight Tint for Textures (Day = 0xffffff, Night = 0x556688)
-        const targetTint = isNight ? 0x445577 : 0xffffff;
+        // 🌙 Silvery Moonlit Blue (Night) vs ☀️ Warm Golden Morning (Day)
+        const targetWorldTint = isNight ? 0x7d94b8 : 0xfff8ee;
+        const targetPlayerTint = isNight ? 0x99b3d6 : 0xffffff;
 
-        // 1. Tint Ground & Decoration Tilemap Layers
-        if (this.world && this.world.map) {
-            const groundLayer = this.world.map.getLayer("ground")?.tilemapLayer;
-            if (groundLayer) groundLayer.setTint(targetTint);
-
-            const decorLayer = this.world.map.getLayer("decoration")?.tilemapLayer;
-            if (decorLayer) decorLayer.setTint(targetTint);
+        // 1. Tint Seamless Grass Floor
+        if (this.grassFloor) {
+            this.grassFloor.setTint(targetWorldTint);
         }
 
-        // 2. Tint Farm Base Dirt Clearing (Uses setFillStyle for Ellipse Shape!)
+        // Tint player to match ambient moonlight (stops glowing like a sticker)
+        if (this.player) {
+            this.player.setTint(targetPlayerTint);
+            if (this.player.pitchforkSprite) {
+                this.player.pitchforkSprite.setTint(targetPlayerTint);
+            }
+        }
+
+        // 2. Tint Farm Base Dirt Clearing
         if (this.farmDirtClearing) {
-            const dirtColor = isNight ? 0x1a1008 : 0x3d2714;
-            this.farmDirtClearing.setFillStyle(dirtColor, 0.88);
-            this.farmDirtClearing.setStrokeStyle(4, isNight ? 0x0f0804 : 0x2b1a0c, 0.6);
+            const dirtColor = isNight ? 0x1f140c : 0x3a2516;
+            const strokeColor = isNight ? 0x120a06 : 0x27170c;
+            this.farmDirtClearing.setFillStyle(dirtColor, 1.0);
+            this.farmDirtClearing.setStrokeStyle(3, strokeColor, 0.85);
         }
 
-        // 3. Tint Environment Trees (No more crashes, trees will darken!)
-        if (this.world && this.world.treeBottomGroup) {
-            this.world.treeBottomGroup.getChildren().forEach((tree: any) => {
-                if (tree && typeof tree.setTint === "function") {
-                    tree.setTint(targetTint);
-                }
-            });
-        }
+        // 3. Environment Props (Trees, Rocks, Bushes)
+        const propGroups = [this.world.treeBottomGroup, this.world.rockGroup, this.world.bushGroup];
+        propGroups.forEach(group => {
+            if (group) {
+                group.getChildren().forEach((prop: any) => {
+                    if (prop && typeof prop.setTint === "function") prop.setTint(targetWorldTint);
+                });
+            }
+        });
 
-        // 4. Tint Environment Rocks
-        if (this.world && this.world.rockGroup) {
-            this.world.rockGroup.getChildren().forEach((rock: any) => {
-                if (rock && typeof rock.setTint === "function") {
-                    rock.setTint(targetTint);
-                }
-            });
-        }
-
-        // 5. Tint Farm Structures (Benches, Totem, Fences)
+        // Farmstead Base Structures
         if (this.scarecrow && typeof this.scarecrow.setTint === "function") {
-            this.scarecrow.setTint(isNight ? 0x886622 : 0xffcc44);
+            this.scarecrow.setTint(isNight ? 0x887755 : 0xffcc44);
         }
-        if (this.craftingBench && typeof this.craftingBench.setTint === "function") {
-            this.craftingBench.setTint(isNight ? 0x664411 : 0xcc8833);
+        if (this.craftingBench && typeof this.scarecrow.setTint === "function") {
+            this.craftingBench.setTint(isNight ? 0x665544 : 0xcc8833);
         }
         if (this.seedComposter && typeof this.seedComposter.setTint === "function") {
-            this.seedComposter.setTint(isNight ? 0x224411 : 0x55aa33);
+            this.seedComposter.setTint(isNight ? 0x334422 : 0x55aa33);
+        }
+    }
+
+    private createBuildBarUI() {
+        const barX = 300;
+        const barY = 575;
+
+        const barBg = this.add.rectangle(barX, barY, 320, 48, 0x111a11, 0.95);
+        barBg.setStrokeStyle(2, 0x55aa55).setScrollFactor(0).setDepth(29999).setVisible(false);
+
+        const slot1 = this.add.rectangle(barX - 100, barY, 90, 38, 0x223322, 0.9).setStrokeStyle(2, 0xffff00).setScrollFactor(0).setDepth(30000).setVisible(false).setInteractive({ useHandCursor: true });
+        const text1 = this.add.text(barX - 100, barY, "[1] 🌵 Spikes\n1 Biomass", { fontFamily: "Arial", fontSize: "10px", align: "center", color: "#ffffff" }).setOrigin(0.5).setScrollFactor(0).setDepth(30001).setVisible(false);
+
+        const slot2 = this.add.rectangle(barX, barY, 90, 38, 0x223322, 0.9).setStrokeStyle(1, 0x888888).setScrollFactor(0).setDepth(30000).setVisible(false).setInteractive({ useHandCursor: true });
+        const text2 = this.add.text(barX, barY, "[2] 🎃 Sentry\n2 Bio+1 Pmp", { fontFamily: "Arial", fontSize: "10px", align: "center", color: "#ffffff" }).setOrigin(0.5).setScrollFactor(0).setDepth(30001).setVisible(false);
+
+        const slot3 = this.add.rectangle(barX + 100, barY, 90, 38, 0x223322, 0.9).setStrokeStyle(1, 0x888888).setScrollFactor(0).setDepth(30000).setVisible(false).setInteractive({ useHandCursor: true });
+        const text3 = this.add.text(barX + 100, barY, "[3] 🧨 Barrel\n1 Bio+1 Awd", { fontFamily: "Arial", fontSize: "10px", align: "center", color: "#ffffff" }).setOrigin(0.5).setScrollFactor(0).setDepth(30001).setVisible(false);
+
+        slot1.on("pointerdown", () => { this.backpack.activeTrapSlot = 1; this.updateBuildBarSlots(); });
+        slot2.on("pointerdown", () => { if (this.backpack.isSentryUnlocked) { this.backpack.activeTrapSlot = 2; this.updateBuildBarSlots(); } });
+        slot3.on("pointerdown", () => { if (this.backpack.isBarrelUnlocked) { this.backpack.activeTrapSlot = 3; this.updateBuildBarSlots(); } });
+
+        this.buildBarGroup = [barBg, slot1, text1, slot2, text2, slot3, text3];
+    }
+
+    private updateBuildBarSlots() {
+        const slot1 = this.buildBarGroup[1] as Phaser.GameObjects.Rectangle;
+        const slot2 = this.buildBarGroup[3] as Phaser.GameObjects.Rectangle;
+        const slot3 = this.buildBarGroup[5] as Phaser.GameObjects.Rectangle;
+
+        slot1.setStrokeStyle(this.backpack.activeTrapSlot === 1 ? 2 : 1, this.backpack.activeTrapSlot === 1 ? 0xffff00 : 0x55aa55);
+        slot2.setStrokeStyle(this.backpack.activeTrapSlot === 2 ? 2 : 1, this.backpack.activeTrapSlot === 2 ? 0xffff00 : (this.backpack.isSentryUnlocked ? 0x55aa55 : 0x555555));
+        slot3.setStrokeStyle(this.backpack.activeTrapSlot === 3 ? 2 : 1, this.backpack.activeTrapSlot === 3 ? 0xffff00 : (this.backpack.isBarrelUnlocked ? 0x55aa55 : 0x555555));
+    }
+
+    private handleBuildBarToggle() {
+        if (!this.player || this.player.hp <= 0) return;
+
+        if (Phaser.Input.Keyboard.JustDown(this.fenceModeKey)) {
+            this.isBuildBarOpen = !this.isBuildBarOpen;
+            this.buildBarGroup.forEach(el => (el as any).setVisible(this.isBuildBarOpen));
+            this.ghostTrapBox.setVisible(this.isBuildBarOpen);
+            this.ghostRangeCircle.setVisible(this.isBuildBarOpen && this.backpack.activeTrapSlot === 2);
+
+            if (this.isBuildBarOpen) {
+                this.updateBuildBarSlots();
+                this.showFloatingText(this.player.x, this.player.y - 90, "Build Bar [F]: [1/2/3] Switch | [L-Click] Place | [R-Click] Refund", "#55ff55");
+            } else {
+                this.ghostRangeCircle.setVisible(false);
+            }
         }
 
-        // 6. Tint Environment Bushes (No more glowing bushes!)
-        if (this.world && this.world.bushGroup) {
-            this.world.bushGroup.getChildren().forEach((bush: any) => {
-                if (bush && typeof bush.setTint === "function") {
-                    bush.setTint(targetTint); // 👈 Same exact midnight navy (0x445577) as trees!
-                }
-            });
+        if (this.isBuildBarOpen) {
+            const pointer = this.input.activePointer;
+            const gridX = Math.floor(pointer.worldX / 40);
+            const gridY = Math.floor(pointer.worldY / 40);
+            const snappedX = gridX * 40 + 20;
+            const snappedY = gridY * 40 + 20;
+
+            this.ghostTrapBox.setPosition(snappedX, snappedY);
+            this.ghostRangeCircle.setPosition(snappedX, snappedY);
+
+            const isSentry = this.backpack.activeTrapSlot === 2;
+            this.ghostRangeCircle.setVisible(isSentry);
+            this.ghostRangeCircle.setRadius(isSentry ? 180 : 90);
+
+            const isBlocked = this.isTileOccupiedByStructure(snappedX, snappedY);
+            const existingTrap = this.trapManager.getTrapAtWorldPos(pointer.worldX, pointer.worldY);
+
+            if (existingTrap || isBlocked) {
+                this.ghostTrapBox.setFillStyle(0xff2222, 0.4);
+            } else {
+                this.ghostTrapBox.setFillStyle(0x55ff55, 0.4);
+            }
+        }
+    }
+
+    private handleBuildTrapClick(worldX: number, worldY: number) {
+        const slot = this.backpack.activeTrapSlot;
+        const type: TrapType = slot === 1 ? "SPIKES" : (slot === 2 ? "SENTRY" : "BARREL");
+
+        if (type === "SENTRY" && !this.backpack.isSentryUnlocked) {
+            this.showFloatingText(worldX, worldY - 20, "Sentry Locked! Clears on Wave 3", "#ffaa00");
+            return;
+        }
+        if (type === "BARREL" && !this.backpack.isBarrelUnlocked) {
+            this.showFloatingText(worldX, worldY - 20, "Barrels Locked! Clears on Wave 2", "#ffaa00");
+            return;
+        }
+
+        const success = this.trapManager.placeTrap(worldX, worldY, type, this.backpack);
+        if (success) {
+            this.showFloatingText(worldX, worldY - 20, `Placed ${type}!`, "#55ff55");
+        } else {
+            this.showFloatingText(worldX, worldY - 20, "Cannot place or lacking materials!", "#ff5555");
+        }
+    }
+
+    private handleDismantleTrapClick(worldX: number, worldY: number) {
+        const success = this.trapManager.removeTrap(worldX, worldY, this.backpack);
+        if (success) {
+            this.showFloatingText(worldX, worldY - 20, "Trap Refunded to Bag!", "#ffaa00");
         }
     }
 }

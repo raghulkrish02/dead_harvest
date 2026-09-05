@@ -57,7 +57,7 @@ export default class HerbPlot extends Phaser.GameObjects.Sprite {
         }
     }
 
-    public showPrompt(pepperSeeds: number, isWaveActive: boolean) {
+    public showPrompt(biomassCount: number, isWaveActive: boolean) {
         if (isWaveActive) {
             this.promptText.setText("Farming Locked During Wave!");
             this.promptText.setColor("#ff3333");
@@ -65,28 +65,24 @@ export default class HerbPlot extends Phaser.GameObjects.Sprite {
         }
 
         if (!this.isUnlocked) {
-            if (pepperSeeds >= 4) {
-                this.promptText.setText("Press [E] Unlock Herb Plot (4 Seeds)");
+            if (biomassCount >= 3) {
+                this.promptText.setText("Press [E] Unlock Herb Bed (3 Biomass)");
                 this.promptText.setColor("#55ff55");
             } else {
-                this.promptText.setText("Herb Plot Locked! Need 4 Seeds!");
+                this.promptText.setText("Herb Bed Locked! Need 3 Biomass!");
                 this.promptText.setColor("#ff5555");
             }
             return;
         }
 
         if (this.state === HerbState.EMPTY) {
-            if (this.state === HerbState.EMPTY) {
-            // 🛡️ STRICT SAFETY BUFFER: Must have strictly MORE THAN 2 seeds!
-            if (pepperSeeds > 2) {
-                const reserve = pepperSeeds - 2;
-                this.promptText.setText(`Press [E] Cultivate Herb (2 Seeds | Reserve: ${reserve})`);
+            if (biomassCount >= 1) {
+                this.promptText.setText("Press [E] Plant Heal Herb (1 Biomass)");
                 this.promptText.setColor("#55ff55");
             } else {
-                this.promptText.setText(`Need >2 Seeds! (Have: ${pepperSeeds} | Keeping 2 for Pepper Farm)`);
-                this.promptText.setColor("#ffaa00");
+                this.promptText.setText("Need 1 Biomass!");
+                this.promptText.setColor("#ff5555");
             }
-        }
         } else if (this.state === HerbState.PLANTED || this.state === HerbState.GROWING) {
             this.promptText.setText("Growing Heal Herb... (4s)");
             this.promptText.setColor("#ffff55");
@@ -95,6 +91,7 @@ export default class HerbPlot extends Phaser.GameObjects.Sprite {
             this.promptText.setColor("#00ff66");
         }
     }
+
 
     public hidePrompt() {
         this.promptText.setText("");

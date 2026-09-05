@@ -9,25 +9,24 @@ export enum CropState {
 
 export default class FarmPlot extends Phaser.GameObjects.Sprite {
     public state: CropState = CropState.EMPTY;
-    public cropType: string = "pepper";
+    public cropType: "pepper" | "pumpkin" = "pepper";
     
     public isUnlocked: boolean = true;
     public tier: number = 1;
 
-    // 🌾 DISCRETE HARVEST COUNTERS (Zero Math Leaks!)
     public harvestsLeft: number = 4;
     public maxHarvests: number = 4;
-    public fertility: number = 100; // Compatibility property
+    public fertility: number = 100;
 
     private growthTimer: number = 0;
     private baseGrowthDuration: number = 4000;
     private promptText: Phaser.GameObjects.Text;
+    public lastHarvestTime: number = 0; // 👈 Immunity debounce timer
 
     constructor(scene: Phaser.Scene, x: number, y: number) {
         super(scene, x, y, "plowed_dirt");
 
         scene.add.existing(this);
-
         this.setOrigin(0.5, 0.5);
         this.setDisplaySize(36, 36);
         this.setDepth(1);
@@ -50,24 +49,27 @@ export default class FarmPlot extends Phaser.GameObjects.Sprite {
     public updatePlot(delta: number) {
         const tierSpeedMultiplier = 1 + (this.tier - 1) * 0.25;
         const lowSoilPenalty = this.harvestsLeft > 1 ? 1.0 : 0.75;
-        const currentGrowthDuration = this.baseGrowthDuration / tierSpeedMultiplier;
+        
+        // Pumpkins take 7s to grow; Peppers take 4s
+        const cropDuration = this.cropType === "pumpkin" ? 7000 : this.baseGrowthDuration;
+        const currentGrowthDuration = cropDuration / tierSpeedMultiplier;
 
         if (this.isUnlocked && (this.state === CropState.PLANTED || this.state === CropState.GROWING)) {
             this.growthTimer += delta * lowSoilPenalty;
 
             if (this.state === CropState.PLANTED && this.growthTimer >= currentGrowthDuration / 2) {
                 this.state = CropState.GROWING;
-                this.setTint(0x55ff55);
+                this.setTint(this.cropType === "pumpkin" ? 0x88cc44 : 0x55ff55);
             }
 
             if (this.state === CropState.GROWING && this.growthTimer >= currentGrowthDuration) {
                 this.state = CropState.MATURE;
-                this.setTint(0xffaa00);
+                this.setTint(this.cropType === "pumpkin" ? 0xff7700 : 0xffaa00);
             }
         }
     }
 
-    public showPrompt(biomassCount: number, pepperSeeds: number, unlockCost: number = 3) {
+    public showPrompt(biomassCount: number, activeSeed: "pepper" | "pumpkin", seedCount: number, unlockCost: number = 3) {
         if (!this.isUnlocked) {
             if (biomassCount >= unlockCost) {
                 this.promptText.setText(`Press [E] Clear Overgrowth (${unlockCost} Biomass)`);
@@ -79,7 +81,6 @@ export default class FarmPlot extends Phaser.GameObjects.Sprite {
             return;
         }
 
-        // 0 Harvests Left = Soil Depleted
         if (this.harvestsLeft <= 0) {
             if (biomassCount > 0) {
                 this.promptText.setText(`Press [E] Fertilize Soil (1 Biomass ➔ ${this.maxHarvests}/${this.maxHarvests})`);
@@ -89,18 +90,21 @@ export default class FarmPlot extends Phaser.GameObjects.Sprite {
                 this.promptText.setColor("#ff5555");
             }
         } else if (this.state === CropState.EMPTY) {
-            if (pepperSeeds <= 0) {
-                this.promptText.setText("Need 1 Pepper Seed!");
+            const cropName = activeSeed === "pepper" ? "🌶️ Pepper" : "🎃 Pumpkin";
+            if (seedCount <= 0) {
+                this.promptText.setText(`Need 1 ${cropName} Seed! ([TAB] Switch)`);
                 this.promptText.setColor("#ff5555");
             } else {
-                this.promptText.setText(`Press [E] Plant Pepper (Soil: ${this.harvestsLeft}/${this.maxHarvests})`);
+                this.promptText.setText(`Press [E] Plant ${cropName} (Soil: ${this.harvestsLeft}/${this.maxHarvests})`);
                 this.promptText.setColor("#55ff55");
             }
         } else if (this.state === CropState.PLANTED || this.state === CropState.GROWING) {
-            this.promptText.setText(`Growing Pepper... (Soil: ${this.harvestsLeft}/${this.maxHarvests})`);
+            const cropName = this.cropType === "pepper" ? "Pepper 🌶️" : "Pumpkin 🎃";
+            this.promptText.setText(`Growing ${cropName}... (Soil: ${this.harvestsLeft}/${this.maxHarvests})`);
             this.promptText.setColor("#ffff55");
         } else if (this.state === CropState.MATURE) {
-            this.promptText.setText("Press [E] to Harvest Pepper!");
+            const cropName = this.cropType === "pepper" ? "Pepper 🌶️" : "Pumpkin 🎃";
+            this.promptText.setText(`Press [E] Harvest ${cropName}!`);
             this.promptText.setColor("#ffaa00");
         }
     }
@@ -115,9 +119,6 @@ export default class FarmPlot extends Phaser.GameObjects.Sprite {
         this.harvestsLeft = this.maxHarvests;
         this.fertility = 100;
         this.clearTint();
-
-        if (this.tier === 2) this.setTint(0x88ff88);
-        else if (this.tier === 3) this.setTint(0x44aaff);
         return true;
     }
 
@@ -128,9 +129,6 @@ export default class FarmPlot extends Phaser.GameObjects.Sprite {
         this.harvestsLeft = this.maxHarvests;
         this.fertility = 100;
         this.clearTint();
-
-        if (this.tier === 2) this.setTint(0x88ff88);
-        else if (this.tier === 3) this.setTint(0x44aaff);
         return true;
     }
 
@@ -139,33 +137,32 @@ export default class FarmPlot extends Phaser.GameObjects.Sprite {
         this.maxHarvests = this.getMaxHarvestsForTier(this.tier);
 
         if (!this.isUnlocked) {
-            this.setTint(0x443322); // Keep dark overgrown tint for locked plots
+            this.setTint(0x443322);
             return;
         }
 
         this.harvestsLeft = this.maxHarvests;
         this.fertility = 100;
         this.clearTint();
-
-        if (this.tier === 2) this.setTint(0x88ff88);
-        if (this.tier === 3) this.setTint(0x44aaff);
     }
 
-    public plantSeed(cropType: string = "pepper"): boolean {
+    public plantSeed(cropType: "pepper" | "pumpkin" = "pepper"): boolean {
         if (!this.isUnlocked || this.state !== CropState.EMPTY || this.harvestsLeft <= 0) return false;
 
         this.state = CropState.PLANTED;
         this.cropType = cropType;
         this.growthTimer = 0;
-        this.setTint(0x664422);
+        this.setTint(cropType === "pumpkin" ? 0x665522 : 0x664422);
         return true;
     }
 
-    public harvest(): { ammo: number; seeds: number } | null {
+    public harvest(): { ammo: number; seeds: number; pumpkins: number; pumpkinSeeds: number } | null {
         if (!this.isUnlocked || this.state !== CropState.MATURE) return null;
 
+        const harvestedType = this.cropType;
         this.state = CropState.EMPTY;
         this.growthTimer = 0;
+        this.lastHarvestTime = this.scene.time.now + 450; // 👈 Protects plot from accidental auto-sowing!
 
         this.harvestsLeft = Math.max(0, this.harvestsLeft - 1);
         this.fertility = Math.round((this.harvestsLeft / this.maxHarvests) * 100);
@@ -173,18 +170,27 @@ export default class FarmPlot extends Phaser.GameObjects.Sprite {
         if (this.harvestsLeft <= 0) {
             this.setTint(0x777777);
         } else {
-            if (this.tier === 2) this.setTint(0x88ff88);
-            else if (this.tier === 3) this.setTint(0x44aaff);
-            else this.clearTint();
+            this.clearTint();
         }
 
-        // 🌶️ FARM MUNITIONS SCALING: Tier 1 = 2 Ammo | Tier 2 = 3 Ammo | Tier 3 = 4 Ammo
-        const ammoYield = this.tier === 1 ? 2 : (this.tier === 2 ? 3 : 4);
-        const bonusSeed = Math.random() < 0.35 ? 2 : 1;
-
-        return {
-            ammo: ammoYield,
-            seeds: bonusSeed
-        };
+        if (harvestedType === "pumpkin") {
+            const bonusPumpkinSeed = Math.random() < 0.35 ? 2 : 1;
+            return {
+                ammo: 0,
+                seeds: 0,
+                pumpkins: 1,
+                pumpkinSeeds: bonusPumpkinSeed
+            };
+        } else {
+            // 🌶️ NORMALIZED PEPPER YIELD: Tier 1 = 1 Ammo (Prevents Day 1 glut) | Tier 2 = 2 Ammo
+            const ammoYield = this.tier === 1 ? 1 : 2;
+            const bonusSeed = Math.random() < 0.35 ? 2 : 1;
+            return {
+                ammo: ammoYield,
+                seeds: bonusSeed,
+                pumpkins: 0,
+                pumpkinSeeds: 0
+            };
+        }
     }
 }

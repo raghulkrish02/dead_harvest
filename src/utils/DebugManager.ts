@@ -60,12 +60,18 @@ export default class DebugManager {
             this.showDebugText("DEBUG: All Crops Matured!");
         });
 
-        // [1] & [5]: Jump directly to Wave 1 or Wave 5
-        const key1 = this.scene.input.keyboard.addKey(Phaser.Input.Keyboard.KeyCodes.ONE);
-        const key5 = this.scene.input.keyboard.addKey(Phaser.Input.Keyboard.KeyCodes.FIVE);
+        // [F1] - [F5]: Jump directly to any Wave (1 to 5)
+        const keyF1 = this.scene.input.keyboard.addKey(Phaser.Input.Keyboard.KeyCodes.F1);
+        const keyF2 = this.scene.input.keyboard.addKey(Phaser.Input.Keyboard.KeyCodes.F2);
+        const keyF3 = this.scene.input.keyboard.addKey(Phaser.Input.Keyboard.KeyCodes.F3);
+        const keyF4 = this.scene.input.keyboard.addKey(Phaser.Input.Keyboard.KeyCodes.F4);
+        const keyF5 = this.scene.input.keyboard.addKey(Phaser.Input.Keyboard.KeyCodes.F5);
 
-        key1.on("down", () => this.jumpToWave(1));
-        key5.on("down", () => this.jumpToWave(5));
+        keyF1.on("down", () => this.jumpToWave(1));
+        keyF2.on("down", () => this.jumpToWave(2));
+        keyF3.on("down", () => this.jumpToWave(3));
+        keyF4.on("down", () => this.jumpToWave(4));
+        keyF5.on("down", () => this.jumpToWave(5));
     }
 
     private jumpToWave(waveNum: number) {

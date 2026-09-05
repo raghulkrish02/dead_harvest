@@ -3,36 +3,44 @@
   "WorkspaceRootPath": "C:\\Games\\deadharvest\\dead-harvest\\",
   "Documents": [
     {
-      "AbsoluteMoniker": "D:0:0:{A2FE74E1-B743-11D0-AE1A-00A0C90FFFC3}|\u003CMiscFiles\u003E|C:\\Games\\deadharvest\\dead-harvest\\src\\player\\Player.ts||{3B902123-F8A7-4915-9F01-361F908088D0}",
-      "RelativeMoniker": "D:0:0:{A2FE74E1-B743-11D0-AE1A-00A0C90FFFC3}|\u003CMiscFiles\u003E|solutionrelative:src\\player\\Player.ts||{3B902123-F8A7-4915-9F01-361F908088D0}"
-    },
-    {
-      "AbsoluteMoniker": "D:0:0:{A2FE74E1-B743-11D0-AE1A-00A0C90FFFC3}|\u003CMiscFiles\u003E|C:\\Games\\deadharvest\\dead-harvest\\src\\weapons\\MeleeWeapon.ts||{8B382828-6202-11D1-8870-0000F87579D2}",
-      "RelativeMoniker": "D:0:0:{A2FE74E1-B743-11D0-AE1A-00A0C90FFFC3}|\u003CMiscFiles\u003E|solutionrelative:src\\weapons\\MeleeWeapon.ts||{8B382828-6202-11D1-8870-0000F87579D2}"
-    },
-    {
       "AbsoluteMoniker": "D:0:0:{A2FE74E1-B743-11D0-AE1A-00A0C90FFFC3}|\u003CMiscFiles\u003E|C:\\Games\\deadharvest\\dead-harvest\\src\\scenes\\MainScene.ts||{3B902123-F8A7-4915-9F01-361F908088D0}",
       "RelativeMoniker": "D:0:0:{A2FE74E1-B743-11D0-AE1A-00A0C90FFFC3}|\u003CMiscFiles\u003E|solutionrelative:src\\scenes\\MainScene.ts||{3B902123-F8A7-4915-9F01-361F908088D0}"
     },
     {
-      "AbsoluteMoniker": "D:0:0:{A2FE74E1-B743-11D0-AE1A-00A0C90FFFC3}|\u003CMiscFiles\u003E|C:\\Games\\deadharvest\\dead-harvest\\src\\systems\\Backpack.ts||{3B902123-F8A7-4915-9F01-361F908088D0}",
-      "RelativeMoniker": "D:0:0:{A2FE74E1-B743-11D0-AE1A-00A0C90FFFC3}|\u003CMiscFiles\u003E|solutionrelative:src\\systems\\Backpack.ts||{3B902123-F8A7-4915-9F01-361F908088D0}"
-    },
-    {
-      "AbsoluteMoniker": "D:0:0:{A2FE74E1-B743-11D0-AE1A-00A0C90FFFC3}|\u003CMiscFiles\u003E|C:\\Games\\deadharvest\\dead-harvest\\src\\world\\WorldGenerator.ts||{3B902123-F8A7-4915-9F01-361F908088D0}",
-      "RelativeMoniker": "D:0:0:{A2FE74E1-B743-11D0-AE1A-00A0C90FFFC3}|\u003CMiscFiles\u003E|solutionrelative:src\\world\\WorldGenerator.ts||{3B902123-F8A7-4915-9F01-361F908088D0}"
+      "AbsoluteMoniker": "D:0:0:{A2FE74E1-B743-11D0-AE1A-00A0C90FFFC3}|\u003CMiscFiles\u003E|C:\\Games\\deadharvest\\dead-harvest\\src\\main.ts||{3B902123-F8A7-4915-9F01-361F908088D0}",
+      "RelativeMoniker": "D:0:0:{A2FE74E1-B743-11D0-AE1A-00A0C90FFFC3}|\u003CMiscFiles\u003E|solutionrelative:src\\main.ts||{3B902123-F8A7-4915-9F01-361F908088D0}"
     },
     {
       "AbsoluteMoniker": "D:0:0:{A2FE74E1-B743-11D0-AE1A-00A0C90FFFC3}|\u003CMiscFiles\u003E|C:\\Games\\deadharvest\\dead-harvest\\src\\enemies\\Zombie.ts||{3B902123-F8A7-4915-9F01-361F908088D0}",
       "RelativeMoniker": "D:0:0:{A2FE74E1-B743-11D0-AE1A-00A0C90FFFC3}|\u003CMiscFiles\u003E|solutionrelative:src\\enemies\\Zombie.ts||{3B902123-F8A7-4915-9F01-361F908088D0}"
     },
     {
-      "AbsoluteMoniker": "D:0:0:{A2FE74E1-B743-11D0-AE1A-00A0C90FFFC3}|\u003CMiscFiles\u003E|C:\\Games\\deadharvest\\dead-harvest\\src\\weapons\\SeedProjectile.ts||{3B902123-F8A7-4915-9F01-361F908088D0}",
-      "RelativeMoniker": "D:0:0:{A2FE74E1-B743-11D0-AE1A-00A0C90FFFC3}|\u003CMiscFiles\u003E|solutionrelative:src\\weapons\\SeedProjectile.ts||{3B902123-F8A7-4915-9F01-361F908088D0}"
+      "AbsoluteMoniker": "D:0:0:{A2FE74E1-B743-11D0-AE1A-00A0C90FFFC3}|\u003CMiscFiles\u003E|C:\\Games\\deadharvest\\dead-harvest\\src\\player\\Player.ts||{3B902123-F8A7-4915-9F01-361F908088D0}",
+      "RelativeMoniker": "D:0:0:{A2FE74E1-B743-11D0-AE1A-00A0C90FFFC3}|\u003CMiscFiles\u003E|solutionrelative:src\\player\\Player.ts||{3B902123-F8A7-4915-9F01-361F908088D0}"
     },
     {
-      "AbsoluteMoniker": "D:0:0:{A2FE74E1-B743-11D0-AE1A-00A0C90FFFC3}|\u003CMiscFiles\u003E|C:\\Games\\deadharvest\\dead-harvest\\src\\main.ts||{3B902123-F8A7-4915-9F01-361F908088D0}",
-      "RelativeMoniker": "D:0:0:{A2FE74E1-B743-11D0-AE1A-00A0C90FFFC3}|\u003CMiscFiles\u003E|solutionrelative:src\\main.ts||{3B902123-F8A7-4915-9F01-361F908088D0}"
+      "AbsoluteMoniker": "D:0:0:{A2FE74E1-B743-11D0-AE1A-00A0C90FFFC3}|\u003CMiscFiles\u003E|C:\\Games\\deadharvest\\dead-harvest\\src\\world\\WorldGenerator.ts||{3B902123-F8A7-4915-9F01-361F908088D0}",
+      "RelativeMoniker": "D:0:0:{A2FE74E1-B743-11D0-AE1A-00A0C90FFFC3}|\u003CMiscFiles\u003E|solutionrelative:src\\world\\WorldGenerator.ts||{3B902123-F8A7-4915-9F01-361F908088D0}"
+    },
+    {
+      "AbsoluteMoniker": "D:0:0:{A2FE74E1-B743-11D0-AE1A-00A0C90FFFC3}|\u003CMiscFiles\u003E|C:\\Games\\deadharvest\\dead-harvest\\public\\assets\\maps\\world.tmj||{8B382828-6202-11D1-8870-0000F87579D2}",
+      "RelativeMoniker": "D:0:0:{A2FE74E1-B743-11D0-AE1A-00A0C90FFFC3}|\u003CMiscFiles\u003E|solutionrelative:public\\assets\\maps\\world.tmj||{8B382828-6202-11D1-8870-0000F87579D2}"
+    },
+    {
+      "AbsoluteMoniker": "D:0:0:{A2FE74E1-B743-11D0-AE1A-00A0C90FFFC3}|\u003CMiscFiles\u003E|C:\\Games\\deadharvest\\dead-harvest\\src\\weapons\\MeleeWeapon.ts||{8B382828-6202-11D1-8870-0000F87579D2}",
+      "RelativeMoniker": "D:0:0:{A2FE74E1-B743-11D0-AE1A-00A0C90FFFC3}|\u003CMiscFiles\u003E|solutionrelative:src\\weapons\\MeleeWeapon.ts||{8B382828-6202-11D1-8870-0000F87579D2}"
+    },
+    {
+      "AbsoluteMoniker": "D:0:0:{A2FE74E1-B743-11D0-AE1A-00A0C90FFFC3}|\u003CMiscFiles\u003E|C:\\Games\\deadharvest\\dead-harvest\\src\\world\\Scarecrow.ts||{3B902123-F8A7-4915-9F01-361F908088D0}",
+      "RelativeMoniker": "D:0:0:{A2FE74E1-B743-11D0-AE1A-00A0C90FFFC3}|\u003CMiscFiles\u003E|solutionrelative:src\\world\\Scarecrow.ts||{3B902123-F8A7-4915-9F01-361F908088D0}"
+    },
+    {
+      "AbsoluteMoniker": "D:0:0:{A2FE74E1-B743-11D0-AE1A-00A0C90FFFC3}|\u003CMiscFiles\u003E|C:\\Games\\deadharvest\\dead-harvest\\src\\systems\\Backpack.ts||{3B902123-F8A7-4915-9F01-361F908088D0}",
+      "RelativeMoniker": "D:0:0:{A2FE74E1-B743-11D0-AE1A-00A0C90FFFC3}|\u003CMiscFiles\u003E|solutionrelative:src\\systems\\Backpack.ts||{3B902123-F8A7-4915-9F01-361F908088D0}"
+    },
+    {
+      "AbsoluteMoniker": "D:0:0:{A2FE74E1-B743-11D0-AE1A-00A0C90FFFC3}|\u003CMiscFiles\u003E|C:\\Games\\deadharvest\\dead-harvest\\src\\weapons\\SeedProjectile.ts||{3B902123-F8A7-4915-9F01-361F908088D0}",
+      "RelativeMoniker": "D:0:0:{A2FE74E1-B743-11D0-AE1A-00A0C90FFFC3}|\u003CMiscFiles\u003E|solutionrelative:src\\weapons\\SeedProjectile.ts||{3B902123-F8A7-4915-9F01-361F908088D0}"
     },
     {
       "AbsoluteMoniker": "D:0:0:{A2FE74E1-B743-11D0-AE1A-00A0C90FFFC3}|\u003CMiscFiles\u003E|C:\\Games\\deadharvest\\dead-harvest\\src\\weapons\\SeedShooter.ts||{3B902123-F8A7-4915-9F01-361F908088D0}",
@@ -45,10 +53,6 @@
     {
       "AbsoluteMoniker": "D:0:0:{A2FE74E1-B743-11D0-AE1A-00A0C90FFFC3}|\u003CMiscFiles\u003E|C:\\Games\\deadharvest\\dead-harvest\\src\\systems\\WaveManager.ts||{3B902123-F8A7-4915-9F01-361F908088D0}",
       "RelativeMoniker": "D:0:0:{A2FE74E1-B743-11D0-AE1A-00A0C90FFFC3}|\u003CMiscFiles\u003E|solutionrelative:src\\systems\\WaveManager.ts||{3B902123-F8A7-4915-9F01-361F908088D0}"
-    },
-    {
-      "AbsoluteMoniker": "D:0:0:{A2FE74E1-B743-11D0-AE1A-00A0C90FFFC3}|\u003CMiscFiles\u003E|C:\\Games\\deadharvest\\dead-harvest\\src\\world\\Scarecrow.ts||{3B902123-F8A7-4915-9F01-361F908088D0}",
-      "RelativeMoniker": "D:0:0:{A2FE74E1-B743-11D0-AE1A-00A0C90FFFC3}|\u003CMiscFiles\u003E|solutionrelative:src\\world\\Scarecrow.ts||{3B902123-F8A7-4915-9F01-361F908088D0}"
     },
     {
       "AbsoluteMoniker": "D:0:0:{A2FE74E1-B743-11D0-AE1A-00A0C90FFFC3}|\u003CMiscFiles\u003E|C:\\Games\\deadharvest\\dead-harvest\\src\\world\\CraftingBench.ts||{3B902123-F8A7-4915-9F01-361F908088D0}",
@@ -77,10 +81,6 @@
     {
       "AbsoluteMoniker": "D:0:0:{A2FE74E1-B743-11D0-AE1A-00A0C90FFFC3}|\u003CMiscFiles\u003E|C:\\Games\\deadharvest\\dead-harvest\\vite.config.ts||{3B902123-F8A7-4915-9F01-361F908088D0}",
       "RelativeMoniker": "D:0:0:{A2FE74E1-B743-11D0-AE1A-00A0C90FFFC3}|\u003CMiscFiles\u003E|solutionrelative:vite.config.ts||{3B902123-F8A7-4915-9F01-361F908088D0}"
-    },
-    {
-      "AbsoluteMoniker": "D:0:0:{A2FE74E1-B743-11D0-AE1A-00A0C90FFFC3}|\u003CMiscFiles\u003E|C:\\Games\\deadharvest\\dead-harvest\\public\\assets\\maps\\world.tmj||{8B382828-6202-11D1-8870-0000F87579D2}",
-      "RelativeMoniker": "D:0:0:{A2FE74E1-B743-11D0-AE1A-00A0C90FFFC3}|\u003CMiscFiles\u003E|solutionrelative:public\\assets\\maps\\world.tmj||{8B382828-6202-11D1-8870-0000F87579D2}"
     }
   ],
   "DocumentGroupContainers": [
@@ -90,11 +90,11 @@
       "DocumentGroups": [
         {
           "DockedWidth": 200,
-          "SelectedChildIndex": 17,
+          "SelectedChildIndex": 18,
           "Children": [
             {
               "$type": "Document",
-              "DocumentIndex": 9,
+              "DocumentIndex": 11,
               "Title": "SeedComposter.ts",
               "DocumentMoniker": "C:\\Games\\deadharvest\\dead-harvest\\src\\world\\SeedComposter.ts",
               "RelativeDocumentMoniker": "src\\world\\SeedComposter.ts",
@@ -106,7 +106,7 @@
             },
             {
               "$type": "Document",
-              "DocumentIndex": 14,
+              "DocumentIndex": 15,
               "Title": "DebugManager.ts",
               "DocumentMoniker": "C:\\Games\\deadharvest\\dead-harvest\\src\\utils\\DebugManager.ts",
               "RelativeDocumentMoniker": "src\\utils\\DebugManager.ts",
@@ -118,7 +118,7 @@
             },
             {
               "$type": "Document",
-              "DocumentIndex": 12,
+              "DocumentIndex": 13,
               "Title": "CraftingBench.ts",
               "DocumentMoniker": "C:\\Games\\deadharvest\\dead-harvest\\src\\world\\CraftingBench.ts",
               "RelativeDocumentMoniker": "src\\world\\CraftingBench.ts",
@@ -130,7 +130,7 @@
             },
             {
               "$type": "Document",
-              "DocumentIndex": 16,
+              "DocumentIndex": 17,
               "Title": "HerbPlot.ts",
               "DocumentMoniker": "C:\\Games\\deadharvest\\dead-harvest\\src\\world\\HerbPlot.ts",
               "RelativeDocumentMoniker": "src\\world\\HerbPlot.ts",
@@ -142,7 +142,7 @@
             },
             {
               "$type": "Document",
-              "DocumentIndex": 10,
+              "DocumentIndex": 12,
               "Title": "WaveManager.ts",
               "DocumentMoniker": "C:\\Games\\deadharvest\\dead-harvest\\src\\systems\\WaveManager.ts",
               "RelativeDocumentMoniker": "src\\systems\\WaveManager.ts",
@@ -154,7 +154,7 @@
             },
             {
               "$type": "Document",
-              "DocumentIndex": 13,
+              "DocumentIndex": 14,
               "Title": "Fence.ts",
               "DocumentMoniker": "C:\\Games\\deadharvest\\dead-harvest\\src\\world\\Fence.ts",
               "RelativeDocumentMoniker": "src\\world\\Fence.ts",
@@ -166,7 +166,7 @@
             },
             {
               "$type": "Document",
-              "DocumentIndex": 17,
+              "DocumentIndex": 18,
               "Title": "AdManager.ts",
               "DocumentMoniker": "C:\\Games\\deadharvest\\dead-harvest\\src\\systems\\AdManager.ts",
               "RelativeDocumentMoniker": "src\\systems\\AdManager.ts",
@@ -178,7 +178,7 @@
             },
             {
               "$type": "Document",
-              "DocumentIndex": 18,
+              "DocumentIndex": 19,
               "Title": "vite.config.ts",
               "DocumentMoniker": "C:\\Games\\deadharvest\\dead-harvest\\vite.config.ts",
               "RelativeDocumentMoniker": "vite.config.ts",
@@ -190,7 +190,7 @@
             },
             {
               "$type": "Document",
-              "DocumentIndex": 11,
+              "DocumentIndex": 7,
               "Title": "Scarecrow.ts",
               "DocumentMoniker": "C:\\Games\\deadharvest\\dead-harvest\\src\\world\\Scarecrow.ts",
               "RelativeDocumentMoniker": "src\\world\\Scarecrow.ts",
@@ -202,7 +202,7 @@
             },
             {
               "$type": "Document",
-              "DocumentIndex": 6,
+              "DocumentIndex": 9,
               "Title": "SeedProjectile.ts",
               "DocumentMoniker": "C:\\Games\\deadharvest\\dead-harvest\\src\\weapons\\SeedProjectile.ts",
               "RelativeDocumentMoniker": "src\\weapons\\SeedProjectile.ts",
@@ -214,7 +214,7 @@
             },
             {
               "$type": "Document",
-              "DocumentIndex": 8,
+              "DocumentIndex": 10,
               "Title": "SeedShooter.ts",
               "DocumentMoniker": "C:\\Games\\deadharvest\\dead-harvest\\src\\weapons\\SeedShooter.ts",
               "RelativeDocumentMoniker": "src\\weapons\\SeedShooter.ts",
@@ -226,7 +226,7 @@
             },
             {
               "$type": "Document",
-              "DocumentIndex": 15,
+              "DocumentIndex": 16,
               "Title": "FarmPlot.ts",
               "DocumentMoniker": "C:\\Games\\deadharvest\\dead-harvest\\src\\world\\FarmPlot.ts",
               "RelativeDocumentMoniker": "src\\world\\FarmPlot.ts",
@@ -238,7 +238,7 @@
             },
             {
               "$type": "Document",
-              "DocumentIndex": 19,
+              "DocumentIndex": 5,
               "Title": "world.tmj",
               "DocumentMoniker": "C:\\Games\\deadharvest\\dead-harvest\\public\\assets\\maps\\world.tmj",
               "RelativeDocumentMoniker": "public\\assets\\maps\\world.tmj",
@@ -250,7 +250,7 @@
             },
             {
               "$type": "Document",
-              "DocumentIndex": 3,
+              "DocumentIndex": 8,
               "Title": "Backpack.ts",
               "DocumentMoniker": "C:\\Games\\deadharvest\\dead-harvest\\src\\systems\\Backpack.ts",
               "RelativeDocumentMoniker": "src\\systems\\Backpack.ts",
@@ -258,33 +258,32 @@
               "RelativeToolTip": "src\\systems\\Backpack.ts",
               "ViewState": "AgIAADoBAAAAAAAAAAAwwE8BAAAFAAAAAAAAAA==",
               "Icon": "ae27a6b0-e345-4288-96df-5eaf394ee369.003213|",
-              "WhenOpened": "2026-08-09T15:54:27.053Z",
-              "EditorCaption": ""
+              "WhenOpened": "2026-08-09T15:54:27.053Z"
             },
             {
               "$type": "Document",
-              "DocumentIndex": 5,
+              "DocumentIndex": 2,
               "Title": "Zombie.ts",
               "DocumentMoniker": "C:\\Games\\deadharvest\\dead-harvest\\src\\enemies\\Zombie.ts",
               "RelativeDocumentMoniker": "src\\enemies\\Zombie.ts",
               "ToolTip": "C:\\Games\\deadharvest\\dead-harvest\\src\\enemies\\Zombie.ts",
               "RelativeToolTip": "src\\enemies\\Zombie.ts",
-              "ViewState": "AgIAAEYBAAAAAAAAAAAwwFYBAAAAAAAAAAAAAA==",
+              "ViewState": "AgIAAGgDAAAAAAAAAAAqwHsDAAAFAAAAAAAAAA==",
               "Icon": "ae27a6b0-e345-4288-96df-5eaf394ee369.003213|",
-              "WhenOpened": "2026-08-09T13:54:56.519Z"
+              "WhenOpened": "2026-08-09T13:54:56.519Z",
+              "EditorCaption": ""
             },
             {
               "$type": "Document",
-              "DocumentIndex": 1,
+              "DocumentIndex": 6,
               "Title": "MeleeWeapon.ts",
               "DocumentMoniker": "C:\\Games\\deadharvest\\dead-harvest\\src\\weapons\\MeleeWeapon.ts",
               "RelativeDocumentMoniker": "src\\weapons\\MeleeWeapon.ts",
               "ToolTip": "C:\\Games\\deadharvest\\dead-harvest\\src\\weapons\\MeleeWeapon.ts",
               "RelativeToolTip": "src\\weapons\\MeleeWeapon.ts",
-              "ViewState": "AgIAAAkAAAAAAAAAAAAAABYAAAAJAAAAAAAAAA==",
+              "ViewState": "AgIAAFEAAAAAAAAAAAAuwGoAAAAFAAAAAAAAAA==",
               "Icon": "ae27a6b0-e345-4288-96df-5eaf394ee369.003213|",
-              "WhenOpened": "2026-08-05T12:17:24.823Z",
-              "EditorCaption": ""
+              "WhenOpened": "2026-08-05T12:17:24.823Z"
             },
             {
               "$type": "Document",
@@ -294,48 +293,47 @@
               "RelativeDocumentMoniker": "src\\world\\WorldGenerator.ts",
               "ToolTip": "C:\\Games\\deadharvest\\dead-harvest\\src\\world\\WorldGenerator.ts",
               "RelativeToolTip": "src\\world\\WorldGenerator.ts",
-              "ViewState": "AgIAAIUAAAAAAAAAAAAAAIgAAAApAAAAAAAAAA==",
+              "ViewState": "AgIAAE8AAAAAAAAAAAAuwGgAAAABAAAAAAAAAA==",
               "Icon": "ae27a6b0-e345-4288-96df-5eaf394ee369.003213|",
-              "WhenOpened": "2026-08-01T12:23:48.26Z",
-              "EditorCaption": ""
+              "WhenOpened": "2026-08-01T12:23:48.26Z"
             },
             {
               "$type": "Document",
-              "DocumentIndex": 0,
+              "DocumentIndex": 3,
               "Title": "Player.ts",
               "DocumentMoniker": "C:\\Games\\deadharvest\\dead-harvest\\src\\player\\Player.ts",
               "RelativeDocumentMoniker": "src\\player\\Player.ts",
               "ToolTip": "C:\\Games\\deadharvest\\dead-harvest\\src\\player\\Player.ts",
               "RelativeToolTip": "src\\player\\Player.ts",
-              "ViewState": "AgIAAIcCAAAAAAAAAAAwwJwCAAAJAAAAAAAAAA==",
+              "ViewState": "AgIAAEgDAAAAAAAAAAAswFMDAAAmAAAAAAAAAA==",
               "Icon": "ae27a6b0-e345-4288-96df-5eaf394ee369.003213|",
-              "WhenOpened": "2026-08-01T10:50:41.535Z",
-              "EditorCaption": ""
+              "WhenOpened": "2026-08-01T10:50:41.535Z"
             },
             {
               "$type": "Document",
-              "DocumentIndex": 2,
+              "DocumentIndex": 0,
               "Title": "MainScene.ts",
               "DocumentMoniker": "C:\\Games\\deadharvest\\dead-harvest\\src\\scenes\\MainScene.ts",
               "RelativeDocumentMoniker": "src\\scenes\\MainScene.ts",
               "ToolTip": "C:\\Games\\deadharvest\\dead-harvest\\src\\scenes\\MainScene.ts",
               "RelativeToolTip": "src\\scenes\\MainScene.ts",
-              "ViewState": "AgIAAG8AAAAAAAAAAAAAAMsBAABZAAAAAAAAAA==",
+              "ViewState": "AgIAAIoGAAAAAAAAAAAmwJsGAAANAAAAAAAAAA==",
               "Icon": "ae27a6b0-e345-4288-96df-5eaf394ee369.003213|",
               "WhenOpened": "2026-08-01T10:33:32.177Z",
               "EditorCaption": ""
             },
             {
               "$type": "Document",
-              "DocumentIndex": 7,
+              "DocumentIndex": 1,
               "Title": "main.ts",
               "DocumentMoniker": "C:\\Games\\deadharvest\\dead-harvest\\src\\main.ts",
               "RelativeDocumentMoniker": "src\\main.ts",
               "ToolTip": "C:\\Games\\deadharvest\\dead-harvest\\src\\main.ts",
               "RelativeToolTip": "src\\main.ts",
-              "ViewState": "AgIAAAAAAAAAAAAAAAAAAAwAAAAXAAAAAAAAAA==",
+              "ViewState": "AgIAABIAAAAAAAAAAAAAABkAAAAYAAAAAAAAAA==",
               "Icon": "ae27a6b0-e345-4288-96df-5eaf394ee369.003213|",
-              "WhenOpened": "2026-08-01T10:19:18.483Z"
+              "WhenOpened": "2026-08-01T10:19:18.483Z",
+              "EditorCaption": ""
             }
           ]
         }

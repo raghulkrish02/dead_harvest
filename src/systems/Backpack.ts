@@ -5,7 +5,12 @@ export default class Backpack {
     public pepperAmmo: number = 0;
     public pepperSeeds: number = 2;
     public healHerbs: number = 1;
-    public fences: number = 3; // 🪵 Start with 3 free fences for Day 1 bunker setup!
+    // 🔨 3-Slot Trap Build System
+    public activeTrapSlot: 1 | 2 | 3 = 1; // 1: Spikes, 2: Sentry, 3: Barrel
+    public isSpikeUnlocked: boolean = true;
+    public isBarrelUnlocked: boolean = false;
+    public isSentryUnlocked: boolean = false;
+
 
 
      // Root-Burst Ultimate Properties
@@ -43,6 +48,15 @@ export default class Backpack {
     private staminaBg!: Phaser.GameObjects.Rectangle;
     private staminaFill!: Phaser.GameObjects.Rectangle;
     private staminaText!: Phaser.GameObjects.Text;
+
+    // 🎃 3-Crop Agricultural Arsenal
+    public pumpkinSeeds: number = 0;
+    public ironPumpkins: number = 0;
+    public activeSeedType: "pepper" | "pumpkin" = "pepper";
+
+    // HUD Seed Pouch Widget
+    private seedPouchBg!: Phaser.GameObjects.Rectangle;
+    private seedPouchText!: Phaser.GameObjects.Text;
 
     constructor(scene: Phaser.Scene) {
         // ==========================================
@@ -98,7 +112,7 @@ export default class Backpack {
         // --- BOTTOM-CENTER BAG BUTTON ---
         // ==========================================
         const buttonX = 630;
-        const buttonY = 600;
+        const buttonY = 580;
 
         this.bagButton = scene.add.rectangle(buttonX, buttonY, 130, 36, 0x1a331a, 0.95);
         this.bagButton.setStrokeStyle(2, 0x55ff55);
@@ -125,14 +139,14 @@ export default class Backpack {
         // ==========================================
         // --- POPUP INVENTORY WINDOW (CENTER) ---
         // ==========================================
-        const windowX = 1000;
-        const windowY = 500;
+        const windowX = 280;
+        const windowY = 450;
 
-        this.windowBg = scene.add.rectangle(windowX, windowY, 270, 210, 0x111111, 0.95);
+        this.windowBg = scene.add.rectangle(windowX, windowY, 270, 280, 0x111111, 0.95);
         this.windowBg.setStrokeStyle(3, 0x55ff55);
         this.windowBg.setScrollFactor(0).setDepth(30001).setVisible(false);
 
-        this.windowTitle = scene.add.text(windowX, windowY - 80, "🎒 FARMER BACKPACK", {
+        this.windowTitle = scene.add.text(windowX, windowY - 100, "🎒 FARMER BACKPACK", {
             fontFamily: "Arial",
             fontSize: "15px",
             color: "#55ff55",
@@ -140,7 +154,7 @@ export default class Backpack {
             strokeThickness: 3
         }).setOrigin(0.5).setScrollFactor(0).setDepth(30002).setVisible(false);
 
-        this.closeButton = scene.add.text(windowX + 110, windowY - 85, "[X]", {
+        this.closeButton = scene.add.text(windowX + 110, windowY - 100, "[X]", {
             fontFamily: "Arial",
             fontSize: "13px",
             color: "#ff5555",
@@ -159,6 +173,24 @@ export default class Backpack {
                 stroke: "#000000",
                 strokeThickness: 2
             }).setScrollFactor(0).setDepth(30002).setVisible(false);
+
+            // 🎒 On-Screen Seed Pouch Widget (Bottom-Right next to Backpack)
+        const pouchX = 800;
+        const pouchY = 580;
+
+        this.seedPouchBg = scene.add.rectangle(pouchX, pouchY, 170, 36, 0x142814, 0.95);
+        this.seedPouchBg.setStrokeStyle(2, 0xffaa00).setScrollFactor(0).setDepth(29999).setInteractive({ useHandCursor: true });
+
+        this.seedPouchText = scene.add.text(pouchX, pouchY, "🌱 [TAB] 🌶️ Pepper (2)", {
+            fontFamily: "Arial",
+            fontSize: "12px",
+            color: "#ffffff",
+            stroke: "#000000",
+            strokeThickness: 3
+        }).setOrigin(0.5).setScrollFactor(0).setDepth(30000);
+
+        // Click on widget to toggle active seed!
+        this.seedPouchBg.on("pointerdown", () => this.toggleActiveSeed());
 
             this.updateHUD(scene);
             this.updateRootBurstHUD();
@@ -214,7 +246,8 @@ export default class Backpack {
 
     public addPepperSeeds(amount: number) {
         this.pepperSeeds += amount;
-        if (this.isOpen) this.updateHUD(); // 🎒 Live update on seed drops!
+        this.updateSeedPouchUI();
+        if (this.isOpen) this.updateHUD();
     }
 
     public addHealHerbs(amount: number) {
@@ -233,8 +266,12 @@ export default class Backpack {
                 `🟢 Biomass: ${this.biomassCount}\n` +
                 `🌶️ Pepper Ammo: ${this.pepperAmmo}\n` +
                 `🌱 Pepper Seeds: ${this.pepperSeeds}\n` +
+                `🎃 Pumpkin Seeds: ${this.pumpkinSeeds}\n` +
+                `🎃 Iron Pumpkins: ${this.ironPumpkins}\n` +
                 `🌿 Heal Herbs: ${this.healHerbs} [Press H]\n` +
-                `🪵 Fences: ${this.fences} [Press F to Place]`
+                `🌵 Bramble Spikes (1 Biomass) [Build Bar: F]\n` +
+                `🧨 Pepper Barrel (1 Bio + 1 Ammo)\n` +
+                `🎃 Pumpkin Sentry (2 Bio + 1 Pumpkin)`
             );
         }
     }
@@ -279,6 +316,15 @@ export default class Backpack {
         return false;
     }
 
+    public addRootCharge(amount: number = 1): boolean {
+        if (this.rootCharges < this.maxRootCharges) {
+            this.rootCharges = Math.min(this.maxRootCharges, this.rootCharges + amount);
+            this.updateRootBurstHUD();
+            return true;
+        }
+        return false;
+    }
+
     public setMaxRootCharges(max: number) {
         this.maxRootCharges = max;
         this.rootCharges = Math.min(this.rootCharges, max);
@@ -303,16 +349,15 @@ export default class Backpack {
         this.staminaFill.displayWidth = 160 * pct;
         this.staminaText.setText(`⚡ STAMINA [SHIFT]: ${Math.round(this.stamina)}%`);
 
-        if (this.stamina < 45) this.staminaFill.setFillStyle(0xffaa00);
+        if (this.stamina < 33) this.staminaFill.setFillStyle(0xffaa00);
         else this.staminaFill.setFillStyle(0x00aaff);
     }
 
-    public consumeStamina(amount: number = 45): boolean {
+    // ⚡ Fair Dodge: Cost reduced for fluid combat mobility
+    public consumeStamina(amount: number = 33): boolean {
         if (this.stamina >= amount) {
             this.stamina -= amount;
-            // 🔒 Freeze stamina regeneration for 0.8 seconds (800ms) after dodging!
-            const mainScene = (this as any).scene || Phaser.Scene;
-            this.staminaRegenDelayTimer = (this.staminaBg.scene.time.now) + 800;
+            this.staminaRegenDelayTimer = (this.staminaBg.scene.time.now) + 600;
             return true;
         }
         return false;
@@ -325,14 +370,46 @@ export default class Backpack {
         this.staminaText?.setVisible(true);
     }
 
-    public consumeMeleeStamina(isHolding: boolean = false): boolean {
-        const cost = isHolding ? 12 : 7; // 👈 7 for clicking, 12 for holding
+    // 🗡️ Rhythmic Combo Stamina: 4 -> 5 -> 8 (Fast 180ms regen delay)
+    public consumeMeleeStamina(hitStep: number = 1): boolean {
+        const cost = hitStep === 3 ? 8 : (hitStep === 2 ? 5 : 4);
         if (this.stamina >= cost) {
             this.stamina -= cost;
-            this.staminaRegenDelayTimer = (this.staminaBg.scene.time.now) + 350;
+            this.staminaRegenDelayTimer = (this.staminaBg.scene.time.now) + 180;
             return true;
         }
         return false;
+    }
+
+    public toggleActiveSeed() {
+        if (this.activeSeedType === "pepper") {
+            this.activeSeedType = "pumpkin";
+        } else {
+            this.activeSeedType = "pepper";
+        }
+        this.updateSeedPouchUI();
+    }
+
+    public updateSeedPouchUI() {
+        if (!this.seedPouchText) return;
+        if (this.activeSeedType === "pepper") {
+            this.seedPouchText.setText(`🌱 [TAB] 🌶️ Pepper (${this.pepperSeeds})`);
+            this.seedPouchBg.setStrokeStyle(2, 0xffaa00);
+        } else {
+            this.seedPouchText.setText(`🌱 [TAB] 🎃 Pumpkin (${this.pumpkinSeeds})`);
+            this.seedPouchBg.setStrokeStyle(2, 0xff7700);
+        }
+    }
+
+    public addPumpkinSeeds(amount: number) {
+        this.pumpkinSeeds += amount;
+        this.updateSeedPouchUI();
+        if (this.isOpen) this.updateHUD();
+    }
+
+    public addIronPumpkins(amount: number) {
+        this.ironPumpkins += amount;
+        if (this.isOpen) this.updateHUD();
     }
 
 

@@ -25,40 +25,30 @@ export default class SeedComposter extends Phaser.GameObjects.Sprite {
         }).setOrigin(0.5).setDepth(20000);
     }
 
+    public unlockComposter() {
+        this.isUnlocked = true;
+        this.setVisible(true);
+        this.setTint(0x88ff44);
+    }
+
     public signalUnlockReady() {
         if (this.isUnlocked) return;
         this.setVisible(true);
         this.setAlpha(1.0);
-        this.setTint(0xffcc00); // Static yellow highlight — ZERO TWEENS, ZERO JUMPING
+        this.setTint(0xffcc00);
     }
 
-    public unlockComposter(): boolean {
-        this.isUnlocked = true;
-        this.setVisible(true);
-        this.setAlpha(1.0);
-        this.setTint(0x55aa33);
-        this.setDisplaySize(36, 36);
-        return true;
-    }
-
-    public showPrompt(seeds: number, isWaveActive: boolean) {
-        if (isWaveActive) {
-            this.promptText.setText("Composting Locked During Wave!");
-            this.promptText.setColor("#ff3333");
+    public showPrompt(seedsCount: number, isWaveActive: boolean) {
+        if (!this.isUnlocked || isWaveActive) {
+            this.promptText.setText("");
             return;
         }
 
-        if (!this.isUnlocked) {
-            this.promptText.setText("Press [E] to Activate Seed Composter!");
-            this.promptText.setColor("#55ff55");
-            return;
-        }
-
-        if (seeds > 5) {
-            this.promptText.setText("Press [E] Compost 4 Seeds (+1 Biomass)");
+        if (seedsCount > 0) {
+            this.promptText.setText(`Press [E] Compost Seeds -> Get Pumpkins (-3 Seeds)`);
             this.promptText.setColor("#55ff55");
         } else {
-            this.promptText.setText(`Need >5 Seeds to Compost (Have: ${seeds})`);
+            this.promptText.setText(`Seed Composter | Need Seeds to Compost`);
             this.promptText.setColor("#ffaa00");
         }
     }
@@ -67,11 +57,25 @@ export default class SeedComposter extends Phaser.GameObjects.Sprite {
         this.promptText.setText("");
     }
 
-    public compost(backpack: Backpack): boolean {
-        if (!this.isUnlocked || backpack.pepperSeeds <= 5) return false;
+    public compost(backpack: Backpack, scene: Phaser.Scene): boolean {
+        if (!this.isUnlocked || backpack.pepperSeeds < 3) return false;
 
-        backpack.addPepperSeeds(-4);
-        backpack.addBiomass(1);
+        backpack.addPepperSeeds(-3);
+        backpack.addIronPumpkins(1);
+
+        // ðŸŒŸ Composter Green Burst
+        const burst = scene.add.circle(this.x, this.y, 12, 0x44ff44, 0.9);
+        burst.setDepth(25000);
+        scene.tweens.add({
+            targets: burst,
+            radius: 80,
+            alpha: 0,
+            duration: 350,
+            ease: "Cubic.easeOut",
+            onComplete: () => burst.destroy()
+        });
+
+        scene.cameras.main.shake(50, 0.002);
         return true;
     }
 }

@@ -1,4 +1,4 @@
-import Phaser from "phaser";
+﻿import Phaser from "phaser";
 import Backpack from "../systems/Backpack";
 
 export interface IFenceData {
@@ -265,29 +265,77 @@ export class FenceManager {
         return false;
     }
 
-    // Location: src/world/Fence.ts (Add inside FenceManager class)
+    public findSmartPathOrFence(
+        zombieX: number,
+        zombieY: number,
+        playerX: number,
+        playerY: number,
+        maxDetourTiles: number = 8 // 👈 Scans up to 8 tiles (320px) in both directions!
+    ): { gap?: { x: number; y: number }; blockingFence?: IFenceData } {
+        const startGridX = Math.floor(zombieX / 40);
+        const startGridY = Math.floor(zombieY / 40);
+        const targetGridX = Math.floor(playerX / 40);
+        const targetGridY = Math.floor(playerY / 40);
 
-    public findNearbyOpening(gridX: number, gridY: number, preferredDir: Phaser.Math.Vector2): { x: number; y: number } | null {
-        // Check horizontal wall gaps (left / right)
-        const checkOffsets = [1, -1, 2, -2];
+        // 1. Raycast line of sight from Zombie to Player to find blocking fence
+        let blockingFence: IFenceData | undefined;
+        const steps = Math.max(Math.abs(targetGridX - startGridX), Math.abs(targetGridY - startGridY));
 
-        // If zombie is moving mostly vertically, check horizontal openings
-        if (Math.abs(preferredDir.y) > Math.abs(preferredDir.x)) {
-            for (const offset of checkOffsets) {
-                const targetGridX = gridX + offset;
-                if (!this.hasIntactFenceAt(targetGridX, gridY)) {
-                    return { x: targetGridX * 40 + 20, y: gridY * 40 + 20 };
-                }
-            }
-        } else {
-            // If zombie is moving mostly horizontally, check vertical openings
-            for (const offset of checkOffsets) {
-                const targetGridY = gridY + offset;
-                if (!this.hasIntactFenceAt(gridX, targetGridY)) {
-                    return { x: gridX * 40 + 20, y: targetGridY * 40 + 20 };
-                }
+        for (let i = 1; i <= Math.min(steps, 10); i++) {
+            const t = i / steps;
+            const checkX = Math.round(startGridX + (targetGridX - startGridX) * t);
+            const checkY = Math.round(startGridY + (targetGridY - startGridY) * t);
+
+            const fence = this.fenceMap.get(`${checkX},${checkY}`);
+            if (fence && fence.state === "INTACT") {
+                blockingFence = fence;
+                break;
             }
         }
-        return null;
+
+        // Direct path to player is clear!
+        if (!blockingFence) {
+            return {};
+        }
+
+        // 2. Search for the nearest opening along the fence line (8 tiles left & right)
+        const isHorizontalWall = Math.abs(playerY - zombieY) > Math.abs(playerX - zombieX);
+        let closestGap: { x: number; y: number } | undefined;
+        let shortestDist = Infinity;
+
+        for (let offset = 1; offset <= maxDetourTiles; offset++) {
+            const checkOffsets = [offset, -offset];
+
+            for (const off of checkOffsets) {
+                const gx = isHorizontalWall ? blockingFence.gridX + off : blockingFence.gridX;
+                const gy = isHorizontalWall ? blockingFence.gridY : blockingFence.gridY + off;
+
+                // Found an open tile with NO intact fence!
+                if (!this.hasIntactFenceAt(gx, gy)) {
+                    const worldGapX = gx * 40 + 20;
+                    const worldGapY = gy * 40 + 20;
+
+                    // Add a step past the fence line towards the player so zombie walks THROUGH
+                    const stepX = isHorizontalWall ? worldGapX : worldGapX + (playerX > zombieX ? 32 : -32);
+                    const stepY = isHorizontalWall ? worldGapY + (playerY > zombieY ? 32 : -32) : worldGapY;
+
+                    const dist = Phaser.Math.Distance.Between(zombieX, zombieY, stepX, stepY);
+
+                    if (dist < shortestDist) {
+                        shortestDist = dist;
+                        closestGap = { x: stepX, y: stepY };
+                    }
+                }
+            }
+
+            if (closestGap) break; // Pick closest gap on this search radius
+        }
+
+        if (closestGap) {
+            return { gap: closestGap };
+        }
+
+        // No opening found within 8 tiles -> Must chew blocking fence!
+        return { blockingFence };
     }
 }

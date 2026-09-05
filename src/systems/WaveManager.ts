@@ -69,12 +69,12 @@ export default class WaveManager {
 
     private initWaveConfigs() {
         this.waveConfigs = [
-        { waveNumber: 1, totalZombies: 6,  spawnIntervalMs: 1800, runnerRatio: 0.0, bruteCount: 0 },
-        { waveNumber: 2, totalZombies: 10, spawnIntervalMs: 1600, runnerRatio: 0.2, bruteCount: 0 },
-        { waveNumber: 3, totalZombies: 15, spawnIntervalMs: 1300, runnerRatio: 0.3, bruteCount: 1 }, // 🔥 Brute forces ranged!
-        { waveNumber: 4, totalZombies: 22, spawnIntervalMs: 1100, runnerRatio: 0.4, bruteCount: 2 },
-        { waveNumber: 5, totalZombies: 30, spawnIntervalMs: 950,  runnerRatio: 0.4, bruteCount: 3, bossType: "TITAN" },
-    ];
+            { waveNumber: 1, totalZombies: 8,  spawnIntervalMs: 1400, runnerRatio: 0.0,  bruteCount: 0 },
+            { waveNumber: 2, totalZombies: 18, spawnIntervalMs: 1000, runnerRatio: 0.20, bruteCount: 0 },
+            { waveNumber: 3, totalZombies: 28, spawnIntervalMs: 800,  runnerRatio: 0.28, bruteCount: 1 },
+            { waveNumber: 4, totalZombies: 40, spawnIntervalMs: 650,  runnerRatio: 0.35, bruteCount: 2 },
+            { waveNumber: 5, totalZombies: 50, spawnIntervalMs: 550,  runnerRatio: 0.36, bruteCount: 3, bossType: "TITAN" },
+        ];
     }
 
     public getActiveZombies(): Zombie[] {
