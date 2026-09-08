@@ -58,10 +58,9 @@ export default class SeedProjectile extends Phaser.Physics.Arcade.Sprite {
     }
 
     private startPhoenixFlightVFX(flyAngle: number) {
-        // 🦅 Swept-Wing Blazing Phoenix with Thermal Smoke & Feather Trails
         this.trailTimer = this.scene.time.addEvent({
-            delay: 20,
-            repeat: 65,
+            delay: 24,
+            repeat: 55,
             callback: () => {
                 if (!this.active) {
                     this.trailTimer?.remove();
@@ -73,7 +72,8 @@ export default class SeedProjectile extends Phaser.Physics.Arcade.Sprite {
                 const perpX = Math.cos(flyAngle + Math.PI / 2);
                 const perpY = Math.sin(flyAngle + Math.PI / 2);
 
-                // 1. Arched Swept Flaming Wings (Left & Right Flanks)
+                // 1. Batch all 4 wing feathers into 1 single tween!
+                const feathers: Phaser.GameObjects.Ellipse[] = [];
                 [-18, -9, 9, 18].forEach((wingSpan) => {
                     const wingBackSweep = Math.abs(wingSpan) * 0.8;
                     const wx = this.x - cos * wingBackSweep + perpX * wingSpan;
@@ -83,24 +83,26 @@ export default class SeedProjectile extends Phaser.Physics.Arcade.Sprite {
                     feather.setRotation(flyAngle + (wingSpan > 0 ? 0.35 : -0.35))
                            .setBlendMode(Phaser.BlendModes.ADD)
                            .setDepth(25000);
-
-                    this.scene.tweens.add({
-                        targets: feather,
-                        x: wx - cos * 22,
-                        y: wy - sin * 22,
-                        scaleX: 0.2,
-                        alpha: 0,
-                        duration: 180,
-                        ease: "Quad.easeOut",
-                        onComplete: () => feather.destroy()
-                    });
+                    feather.setData("tx", wx - cos * 22);
+                    feather.setData("ty", wy - sin * 22);
+                    feathers.push(feather);
                 });
 
-                // 2. Trailing Thermal Soot & White-Hot Core Embers
+                this.scene.tweens.add({
+                    targets: feathers,
+                    x: (t: any) => t.getData("tx"),
+                    y: (t: any) => t.getData("ty"),
+                    scaleX: 0.2,
+                    alpha: 0,
+                    duration: 180,
+                    ease: "Quad.easeOut",
+                    onComplete: () => feathers.forEach(f => { if (f && f.active) f.destroy(); })
+                });
+
+                // 2. Trailing Embers & Thermal Smoke
                 const tailX = this.x - cos * 16 + Phaser.Math.Between(-3, 3);
                 const tailY = this.y - sin * 16 + Phaser.Math.Between(-3, 3);
 
-                // Additive White/Gold Spark
                 const ember = this.scene.add.circle(tailX, tailY, Phaser.Math.Between(3, 5), 0xffff88, 1.0);
                 ember.setBlendMode(Phaser.BlendModes.ADD).setDepth(25001);
                 this.scene.tweens.add({
@@ -113,7 +115,6 @@ export default class SeedProjectile extends Phaser.Physics.Arcade.Sprite {
                     onComplete: () => ember.destroy()
                 });
 
-                // Dark Rising Thermal Smoke Puff
                 const smoke = this.scene.add.circle(tailX, tailY, Phaser.Math.Between(5, 9), 0x331a0a, 0.45).setDepth(24998);
                 this.scene.tweens.add({
                     targets: smoke,
@@ -133,7 +134,10 @@ export default class SeedProjectile extends Phaser.Physics.Arcade.Sprite {
         if (!this.active || !zombie.active) return;
 
         if (this.isPhoenix) {
-            this.explodePhoenixAoE();
+            // 1. GUARANTEE direct damage to the target struck before AoE
+            const knockDir = new Phaser.Math.Vector2(zombie.x - this.x, zombie.y - this.y).normalize();
+            zombie.takeDamage(this.damage, knockDir, 280, "RANGED");
+            this.explodePhoenixAoE(zombie);
         } else {
             const zombieChestY = zombie.y - (zombie.displayHeight / 2);
             const knockbackDir = new Phaser.Math.Vector2(
@@ -142,9 +146,13 @@ export default class SeedProjectile extends Phaser.Physics.Arcade.Sprite {
             ).normalize();
 
             const mainScene = this.scene as any;
-            if (mainScene.triggerHitStop) mainScene.triggerHitStop(40);
+            if (mainScene.triggerHitStop) mainScene.triggerHitStop(0);
 
-            this.scene.cameras.main.shake(60, 0.003);
+            if (mainScene.triggerSmartShake) {
+                mainScene.triggerSmartShake("LIGHT");
+            } else {
+                this.scene.cameras.main.shake(40, 0.0015);
+            }
             zombie.takeDamage(this.damage, knockbackDir, this.knockbackForce, "RANGED");
             this.spawnFireBurst();
             this.cleanup();
@@ -164,21 +172,29 @@ export default class SeedProjectile extends Phaser.Physics.Arcade.Sprite {
             }
         }
 
-        if (this.isPhoenix) this.explodePhoenixAoE();
+        if (this.isPhoenix) this.explodePhoenixAoE(undefined);
         else {
             this.spawnFireBurst();
             this.cleanup();
         }
     }
 
-    private explodePhoenixAoE() {
+    private explodePhoenixAoE(directTarget?: Zombie) {
         const aoeRadius = 105;
         const mainScene = this.scene as any;
 
-        if (mainScene.triggerHitStop) mainScene.triggerHitStop(70);
-        this.scene.cameras.main.shake(160, 0.012);
+        // Kill trail timer immediately so flight particles stop generating
+        this.trailTimer?.remove();
 
-        // 💥 PHASE 1 (0–300ms): High-Speed Additive Solar Shockwaves
+        // 🚀 Zero-Freeze AOE: Keeps game moving at full 60 FPS without the 5-frame hitch!
+        if (mainScene.triggerHitStop) mainScene.triggerHitStop(0);
+        if (mainScene.triggerSmartShake) {
+            mainScene.triggerSmartShake("HEAVY");
+        } else {
+            this.scene.cameras.main.shake(160, 0.012);
+        }
+
+        // 💥 PHASE 1: Dual Additive Shockwaves
         const outerRing = this.scene.add.circle(this.x, this.y, 12, 0xff3300, 0.9);
         outerRing.setStrokeStyle(6, 0xffff66).setBlendMode(Phaser.BlendModes.ADD).setDepth(25002);
         this.scene.tweens.add({
@@ -201,7 +217,8 @@ export default class SeedProjectile extends Phaser.Physics.Arcade.Sprite {
             onComplete: () => flashCore.destroy()
         });
 
-        // � PHASE 2 (100–1600ms): Volumetric Billowing Smoke & Fog Clouds (Multi-Layer Depth)
+        // 💨 PHASE 2: 14 Billowing Smoke Clouds (Batched into 1 Single Tween!)
+        const smokeClouds: Phaser.GameObjects.Arc[] = [];
         for (let s = 0; s < 14; s++) {
             const smokeAng = Phaser.Math.FloatBetween(0, Math.PI * 2);
             const smokeDist = Phaser.Math.Between(20, aoeRadius * 0.75);
@@ -211,20 +228,25 @@ export default class SeedProjectile extends Phaser.Physics.Arcade.Sprite {
             const smokeColor = s % 2 === 0 ? 0x221815 : 0x3d2314;
             const smokeCloud = this.scene.add.circle(this.x, this.y, Phaser.Math.Between(14, 22), smokeColor, 0.75);
             smokeCloud.setDepth(24999);
-
-            this.scene.tweens.add({
-                targets: smokeCloud,
-                x: targetX,
-                y: targetY,
-                scale: Phaser.Math.FloatBetween(1.8, 2.6),
-                alpha: 0,
-                duration: Phaser.Math.Between(1100, 1600),
-                ease: "Cubic.easeOut",
-                onComplete: () => smokeCloud.destroy()
-            });
+            smokeCloud.setData("tx", targetX);
+            smokeCloud.setData("ty", targetY);
+            smokeCloud.setData("tScale", Phaser.Math.FloatBetween(1.8, 2.6));
+            smokeClouds.push(smokeCloud);
         }
 
-        // 🔥 PHASE 3 (200–1800ms): Rising Volcanic Ash & Floating Sparks (Defies Gravity)
+        this.scene.tweens.add({
+            targets: smokeClouds,
+            x: (t: any) => t.getData("tx"),
+            y: (t: any) => t.getData("ty"),
+            scale: (t: any) => t.getData("tScale"),
+            alpha: 0,
+            duration: 1300,
+            ease: "Cubic.easeOut",
+            onComplete: () => smokeClouds.forEach(sc => { if (sc && sc.active) sc.destroy(); })
+        });
+
+        // 🔥 PHASE 3: 18 Rising Volcanic Ash Embers (Batched into 1 Single Tween!)
+        const ashEmbers: Phaser.GameObjects.Arc[] = [];
         for (let e = 0; e < 18; e++) {
             const emberAng = Phaser.Math.FloatBetween(0, Math.PI * 2);
             const spreadX = this.x + Math.cos(emberAng) * Phaser.Math.Between(15, 65);
@@ -232,20 +254,23 @@ export default class SeedProjectile extends Phaser.Physics.Arcade.Sprite {
 
             const ashEmber = this.scene.add.circle(spreadX, spreadY, Phaser.Math.Between(2, 4), 0xffaa00, 0.95);
             ashEmber.setBlendMode(Phaser.BlendModes.ADD).setDepth(25001);
-
-            this.scene.tweens.add({
-                targets: ashEmber,
-                x: spreadX + Phaser.Math.Between(-20, 20),
-                y: spreadY - Phaser.Math.Between(35, 75), // 👈 Drifts upward like real fire ash
-                scale: 0.1,
-                alpha: 0,
-                duration: Phaser.Math.Between(1200, 1800),
-                ease: "Quad.easeOut",
-                onComplete: () => ashEmber.destroy()
-            });
+            ashEmber.setData("tx", spreadX + Phaser.Math.Between(-20, 20));
+            ashEmber.setData("ty", spreadY - Phaser.Math.Between(35, 75));
+            ashEmbers.push(ashEmber);
         }
 
-        // 🩸 PHASE 4 (0–2000ms): Charred Ground Crater Decal (Depth 2)
+        this.scene.tweens.add({
+            targets: ashEmbers,
+            x: (t: any) => t.getData("tx"),
+            y: (t: any) => t.getData("ty"),
+            scale: 0.1,
+            alpha: 0,
+            duration: 1400,
+            ease: "Quad.easeOut",
+            onComplete: () => ashEmbers.forEach(ae => { if (ae && ae.active) ae.destroy(); })
+        });
+
+        // 🩸 PHASE 4: Charred Ground Decal
         const scorch = this.scene.add.circle(this.x, this.y, 42, 0x240d05, 0.85).setDepth(2);
         this.scene.tweens.add({
             targets: scorch,
@@ -259,11 +284,16 @@ export default class SeedProjectile extends Phaser.Physics.Arcade.Sprite {
         // Damage & Knockback to Zombies
         if (mainScene.waveManager) {
             const activeZombies = mainScene.waveManager.getActiveZombies();
-            activeZombies.forEach((z: any) => {
-                const dist = Phaser.Math.Distance.Between(this.x, this.y, z.x, z.y - (z.displayHeight / 2));
+            activeZombies.forEach((z: Zombie) => {
+                if (z === directTarget) return; // Already took direct hit damage
+
+                // Center target offset: Titan core is at y - 45, regular zombies at half displayHeight
+                const targetY = (z as any).isBoss ? (z.y - 45) : (z.y - (z.displayHeight / 2));
+                const dist = Phaser.Math.Distance.Between(this.x, this.y, z.x, targetY);
+
                 if (dist <= aoeRadius) {
                     const knockDir = new Phaser.Math.Vector2(z.x - this.x, z.y - this.y).normalize();
-                    z.takeDamage(this.damage, knockDir, this.knockbackForce, "RANGED");
+                    z.takeDamage(this.damage, knockDir, 300, "RANGED");
                 }
             });
         }

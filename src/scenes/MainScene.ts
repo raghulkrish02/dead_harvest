@@ -21,6 +21,7 @@ export default class MainScene extends Phaser.Scene {
     public world!: WorldGenerator;
     public backpack!: Backpack;
     private minimap!: Minimap;
+    private fpsText!: Phaser.GameObjects.Text;
     
     private farmPlots: FarmPlot[] = [];
     private herbPlots: HerbPlot[] = [];
@@ -352,49 +353,30 @@ export default class MainScene extends Phaser.Scene {
             strokeThickness: 3
         }).setOrigin(0.5).setScrollFactor(0).setDepth(30000).setVisible(false);
 
+        let isAirdropLoading = false;
         this.airdropBtn.on("pointerdown", () => {
+            if (isAirdropLoading) return;
+
             const cooldown = AdManager.getInstance().getRemainingCooldownSeconds();
             if (cooldown > 0) {
-                this.showFloatingText(this.player.x, this.player.y - 90, `⚠️ Airdrop on Cooldown! Available in ${cooldown}s`, "#ffaa00", 2500);
+                this.showFloatingText(this.player.x, this.player.y - 90, `⚠️ Airdrop Cooldown: ${cooldown}s`, "#ffaa00", 2500);
                 return;
             }
 
+            isAirdropLoading = true;
+            this.airdropText.setText("⏳ Connecting...");
+
             AdManager.getInstance().playAd("rewarded", (success: boolean) => {
-                if (success && this.player) {
-                    this.physics.world.resume();
+                isAirdropLoading = false;
+                this.airdropText.setText("📦 Airdrop: +3 Biomass");
 
-                    this.player.hp = 50;
-                    this.backpack.updateHP(50, this.player.maxHp);
-                    this.player.clearTint();
-                    this.player.setAlpha(1.0); // 👈 Guaranteed full visibility!
-                    this.player.setVisible(true);
-
-                    this.cameras.main.shake(200, 0.015);
-
-                    const blastRing = this.add.circle(this.player.x, this.player.y - 30, 15, 0x00ffff, 0.8);
-                    blastRing.setStrokeStyle(4, 0xffff00).setDepth(25000);
-                    this.tweens.add({
-                        targets: blastRing,
-                        radius: 160,
-                        alpha: 0,
-                        duration: 400,
-                        ease: "Cubic.easeOut",
-                        onComplete: () => blastRing.destroy()
-                    });
-
-                    if (this.waveManager) {
-                        const activeZombies = this.waveManager.getActiveZombies();
-                        activeZombies.forEach((zombie) => {
-                            const dist = Phaser.Math.Distance.Between(this.player.x, this.player.y - 30, zombie.x, zombie.y - (zombie.displayHeight / 2));
-                            if (dist <= 160) {
-                                const flingDir = new Phaser.Math.Vector2(zombie.x - this.player.x, zombie.y - this.player.y).normalize();
-                                zombie.takeDamage(10, flingDir, 350, "MELEE");
-                            }
-                        });
-                    }
-
-                    this.player.triggerReviveShield(3000);
-                    this.showFloatingText(this.player.x, this.player.y - 110, "⚡ REVIVED WITH 3s INVULNERABILITY SHIELD!", "#00ffff", 3000);
+                if (success && this.backpack) {
+                    this.hasClaimedAirdropThisWave = true;
+                    this.backpack.addBiomass(3);
+                    this.backpack.addPepperSeeds(2);
+                    this.showFloatingText(this.player.x, this.player.y - 90, "📦 AIRDROP DELIVERED! (+3 Biomass & +2 Seeds)", "#55ff55", 3500);
+                } else {
+                    this.showFloatingText(this.player.x, this.player.y - 90, "⚠️ Ad Unavailable (Basic Launch / Blocked)", "#ffaa00", 3000);
                 }
             });
         });
@@ -744,6 +726,14 @@ export default class MainScene extends Phaser.Scene {
         // 🗺️ Ultra-Fast 60 FPS Radar Minimap
         this.minimap = new Minimap(this);
 
+        this.fpsText = this.add.text(980, 210, "FPS: 60", {
+            fontFamily: "Arial",
+            fontSize: "12px",
+            color: "#00ff66",
+            stroke: "#000000",
+            strokeThickness: 3
+        }).setOrigin(0.5).setScrollFactor(0).setDepth(30000);
+
         // 🎨 Smooth Linear Filtering for High-Res Vector Art (Zero Jagged Edges!)
         if (this.textures.exists("player_idle")) {
             this.textures.get("player_idle").setFilter(Phaser.Textures.FilterMode.LINEAR);
@@ -889,11 +879,11 @@ export default class MainScene extends Phaser.Scene {
     public onPlayerDeath() {
         this.physics.world.pause();
 
-        // 📐 Your exact window coordinates (512, 288) & 320x200 modal
-        const windowX = 512;
-        const windowY = 288;
+        // 📐 Your exact window coordinates (600, 338) for 1200x675
+        const windowX = 600;
+        const windowY = 338;
 
-        const modalBg = this.add.rectangle(windowX, windowY, 320, 200, 0x110000, 0.95);
+        const modalBg = this.add.rectangle(windowX, windowY, 340, 210, 0x110000, 0.95);
         modalBg.setStrokeStyle(3, 0xff3333).setScrollFactor(0).setDepth(40000);
 
         const modalTitle = this.add.text(windowX, windowY - 70, "💀 YOU HAVE FALLEN", {
@@ -904,7 +894,7 @@ export default class MainScene extends Phaser.Scene {
             strokeThickness: 3
         }).setOrigin(0.5).setScrollFactor(0).setDepth(40001);
 
-        const reviveBtn = this.add.rectangle(windowX, windowY - 15, 260, 36, 0x1a441a, 0.95);
+        const reviveBtn = this.add.rectangle(windowX, windowY - 15, 270, 36, 0x1a441a, 0.95);
         reviveBtn.setStrokeStyle(2, 0x55ff55).setScrollFactor(0).setDepth(40001).setInteractive({ useHandCursor: true });
 
         const reviveText = this.add.text(windowX, windowY - 15, "📺 Watch Ad: Revive with 50% HP", {
@@ -915,11 +905,23 @@ export default class MainScene extends Phaser.Scene {
             strokeThickness: 2
         }).setOrigin(0.5).setScrollFactor(0).setDepth(40002);
 
-        // ⏱️ LIVE COOLDOWN TICKER
         let countdownTimer: Phaser.Time.TimerEvent | undefined;
+        let isReviving = false;
+        let isBiomassFallbackReady = false;
 
         const updateReviveBtnUI = () => {
+            if (isReviving) return;
             const remaining = AdManager.getInstance().getRemainingCooldownSeconds();
+
+            if (isBiomassFallbackReady) {
+                const canAfford = this.backpack && this.backpack.biomassCount >= 5;
+                reviveBtn.setFillStyle(canAfford ? 0x1a441a : 0x332211, 0.95);
+                reviveBtn.setStrokeStyle(2, canAfford ? 0x55ff55 : 0x885500);
+                reviveText.setText(canAfford ? "🌿 Revive for 5 Biomass" : "❌ Need 5 Biomass to Revive");
+                reviveText.setColor(canAfford ? "#55ff55" : "#ffaa00");
+                return;
+            }
+
             if (remaining > 0) {
                 reviveBtn.setFillStyle(0x332211, 0.85);
                 reviveBtn.setStrokeStyle(2, 0xffaa00);
@@ -947,53 +949,80 @@ export default class MainScene extends Phaser.Scene {
             }
         });
 
+        const executeReviveSuccess = () => {
+            countdownTimer?.remove();
+            this.clearDeathModal();
+            this.physics.world.resume();
+
+            this.player.hp = 50;
+            this.backpack.updateHP(50, this.player.maxHp);
+            this.player.clearTint();
+            this.player.setAlpha(1.0);
+            this.player.setVisible(true);
+
+            this.cameras.main.shake(200, 0.015);
+
+            const blastRing = this.add.circle(this.player.x, this.player.y - 30, 15, 0x00ffff, 0.8);
+            blastRing.setStrokeStyle(4, 0xffff00).setDepth(25000);
+            this.tweens.add({
+                targets: blastRing,
+                radius: 160,
+                alpha: 0,
+                duration: 400,
+                ease: "Cubic.easeOut",
+                onComplete: () => blastRing.destroy()
+            });
+
+            if (this.waveManager) {
+                const activeZombies = this.waveManager.getActiveZombies();
+                activeZombies.forEach((zombie) => {
+                    const dist = Phaser.Math.Distance.Between(this.player.x, this.player.y - 30, zombie.x, zombie.y - (zombie.displayHeight / 2));
+                    if (dist <= 160) {
+                        const flingDir = new Phaser.Math.Vector2(zombie.x - this.player.x, zombie.y - this.player.y).normalize();
+                        zombie.takeDamage(10, flingDir, 350, "MELEE");
+                    }
+                });
+            }
+
+            this.player.triggerReviveShield(3000);
+            this.showFloatingText(this.player.x, this.player.y - 110, "⚡ REVIVED WITH 3s INVULNERABILITY SHIELD!", "#00ffff", 3000);
+        };
+
         reviveBtn.on("pointerdown", () => {
-            const remaining = AdManager.getInstance().getRemainingCooldownSeconds();
-            if (remaining > 0) {
-                this.showFloatingText(this.player.x, this.player.y - 90, `⚠️ Ad on Cooldown! Available in ${remaining}s`, "#ffaa00", 2000);
+            if (isReviving) return;
+
+            // In-Game Biomass Fallback if Ad was disabled/unavailable
+            if (isBiomassFallbackReady) {
+                if (this.backpack && this.backpack.biomassCount >= 5) {
+                    this.backpack.addBiomass(-5);
+                    executeReviveSuccess();
+                } else {
+                    this.showFloatingText(windowX, windowY - 100, "Not enough Biomass!", "#ff5555", 2000);
+                }
                 return;
             }
 
-            countdownTimer?.remove();
-            this.clearDeathModal();
+            const remaining = AdManager.getInstance().getRemainingCooldownSeconds();
+            if (remaining > 0) {
+                this.showFloatingText(windowX, windowY - 100, `⚠️ Ad on Cooldown: ${remaining}s`, "#ffaa00", 2000);
+                return;
+            }
+
+            isReviving = true;
+            reviveText.setText("⏳ Loading Ad...");
+            reviveBtn.setFillStyle(0x222222, 0.8);
 
             AdManager.getInstance().playAd("rewarded", (success: boolean) => {
+                isReviving = false;
+
                 if (success && this.player) {
-                    this.physics.world.resume();
-
-                    this.player.hp = 50;
-                    this.backpack.updateHP(50, this.player.maxHp);
-                    this.player.clearTint();
-
-                    // 💥 1. ERUPT REVIVAL SHOCKWAVE (160px Repulsion Blast)
-                    this.cameras.main.shake(200, 0.015);
-
-                    const blastRing = this.add.circle(this.player.x, this.player.y - 30, 15, 0x00ffff, 0.8);
-                    blastRing.setStrokeStyle(4, 0xffff00).setDepth(25000);
-                    this.tweens.add({
-                        targets: blastRing,
-                        radius: 160,
-                        alpha: 0,
-                        duration: 400,
-                        ease: "Cubic.easeOut",
-                        onComplete: () => blastRing.destroy()
-                    });
-
-                    // Fling all nearby enemies away from spawn spot!
-                    if (this.waveManager) {
-                        const activeZombies = this.waveManager.getActiveZombies();
-                        activeZombies.forEach((zombie) => {
-                            const dist = Phaser.Math.Distance.Between(this.player.x, this.player.y - 30, zombie.x, zombie.y - (zombie.displayHeight / 2));
-                            if (dist <= 160) {
-                                const flingDir = new Phaser.Math.Vector2(zombie.x - this.player.x, zombie.y - this.player.y).normalize();
-                                zombie.takeDamage(10, flingDir, 350, "MELEE");
-                            }
-                        });
-                    }
-
-                    // 🛡️ 2. ACTIVATE 3.0s GOLDEN INVULNERABILITY SHIELD!
-                    this.player.triggerReviveShield(3000);
-                    this.showFloatingText(this.player.x, this.player.y - 110, "⚡ REVIVED WITH 3s INVULNERABILITY SHIELD!", "#00ffff", 3000);
+                    executeReviveSuccess();
+                } else {
+                    // Fail-Safe: Ad blocked or disabled in Basic Launch
+                    // Modal is NOT destroyed! Physics is NOT trapped!
+                    isBiomassFallbackReady = true;
+                    updateReviveBtnUI();
+                    this.showFloatingText(windowX, windowY - 100, "⚠️ Ad Unavailable. Biomass fallback enabled!", "#ffcc00", 3500);
                 }
             });
         });
@@ -1137,7 +1166,13 @@ export default class MainScene extends Phaser.Scene {
                 // A. Hit Active Zombies
                 for (const zombie of activeZombies) {
                     if (zombie && zombie.active) {
-                        if (Phaser.Geom.Intersects.RectangleToRectangle(pBox, zombie.getBounds())) {
+                        // For the Titan, check its real core center (y - 45) with a 55px radius
+                        const targetY = (zombie as any).isBoss ? (zombie.y - 45) : (zombie.y - (zombie.displayHeight / 2));
+                        const isHit = (zombie as any).isBoss
+                            ? Phaser.Math.Distance.Between(proj.x, proj.y, zombie.x, targetY) <= 55
+                            : Phaser.Geom.Intersects.RectangleToRectangle(pBox, zombie.getBounds());
+
+                        if (isHit) {
                             proj.onHitZombie(zombie);
                             hitTarget = true;
                             break;
@@ -1345,6 +1380,12 @@ export default class MainScene extends Phaser.Scene {
             const biomassOrbs = this.children.getChildren().filter(c => c.getData("type") === "biomass");
 
             this.minimap.update(this.player.x, this.player.y, activeZombies, biomassOrbs);
+        }
+
+        if (this.fpsText) {
+            const currentFps = Math.round(this.game.loop.actualFps);
+            this.fpsText.setText(`FPS: ${currentFps}`);
+            this.fpsText.setColor(currentFps >= 55 ? "#00ff66" : (currentFps >= 30 ? "#ffaa00" : "#ff3333"));
         }
     }
 
@@ -1726,10 +1767,47 @@ export default class MainScene extends Phaser.Scene {
         });
     }
 
+    private lastCameraShakeTime: number = 0;
+    public triggerSmartShake(tier: "LIGHT" | "MEDIUM" | "HEAVY" | "BOSS") {
+        const currentTime = this.time.now;
+        // Global Throttle: Prevent overlapping shakes from jarring the camera more than once every 80ms
+        if (currentTime - this.lastCameraShakeTime < 70) return;
+
+        let duration = 50;
+        let intensity = 0.002;
+
+        switch (tier) {
+            case "LIGHT":
+                duration = 35;
+                intensity = 0.0015;
+                break;
+            case "MEDIUM":
+                duration = 65;
+                intensity = 0.0035;
+                break;
+            case "HEAVY":
+                duration = 110;
+                intensity = 0.008;
+                break;
+            case "BOSS":
+                duration = 200;
+                intensity = 0.018;
+                break;
+        }
+
+        this.lastCameraShakeTime = currentTime;
+        this.cameras.main.shake(duration, intensity);
+    }
+
+    private isHitStopRunning: boolean = false;
     private triggerHitStop(durationMs: number) {
+        // Prevents stacking pause/resume calls when 15 zombies take AOE damage at once
+        if (this.isHitStopRunning) return;
+        this.isHitStopRunning = true;
         this.physics.world.pause();
         this.time.delayedCall(durationMs, () => {
             this.physics.world.resume();
+            this.isHitStopRunning = false;
         });
     }
 
@@ -1774,8 +1852,9 @@ export default class MainScene extends Phaser.Scene {
             this.player.triggerCombatStance(500);
         }
 
-        this.triggerHitStop(70);
-        this.cameras.main.shake(160, 0.01);
+        // 🚀 Zero-Freeze AOE: Root Burst stays locked at 60 FPS without the 4-frame pause!
+        this.triggerHitStop(0);
+        this.triggerSmartShake("HEAVY");
 
         const aoeRadius = 125;
         const burstDamage = 45;
@@ -1920,8 +1999,10 @@ export default class MainScene extends Phaser.Scene {
 
         // Damage & Knockback to Zombies
         const activeZombies = this.waveManager.getActiveZombies();
-        activeZombies.forEach((zombie) => {
-            const dist = Phaser.Math.Distance.Between(burstX, burstY, zombie.x, zombie.y - (zombie.displayHeight / 2));
+        activeZombies.forEach((zombie: any) => {
+            // 🎯 Targets the Titan's actual core center (y - 45) instead of 144px in the sky!
+            const targetY = zombie.isBoss ? (zombie.y - 45) : (zombie.y - (zombie.displayHeight / 2));
+            const dist = Phaser.Math.Distance.Between(burstX, burstY, zombie.x, targetY);
             if (dist <= aoeRadius) {
                 const knockbackDir = new Phaser.Math.Vector2(zombie.x - burstX, zombie.y - burstY).normalize();
                 zombie.takeDamage(burstDamage, knockbackDir, 360, "MELEE");

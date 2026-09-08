@@ -153,8 +153,12 @@ export default class MeleeWeapon {
                     zombie.setTint(0xffffff);
                     this.scene.time.delayedCall(60, () => { if (zombie.active) zombie.clearTint(); });
 
-                    if (mainScene.triggerHitStop) mainScene.triggerHitStop(currentHit === 3 ? 50 : 30);
-                    this.scene.cameras.main.shake(currentHit === 3 ? 100 : 50, currentHit === 3 ? 0.005 : 0.002);
+                    if (mainScene.triggerHitStop) mainScene.triggerHitStop(currentHit === 3 ? 40 : 0);
+                    if (mainScene.triggerSmartShake) {
+                        mainScene.triggerSmartShake(currentHit === 3 ? "MEDIUM" : "LIGHT");
+                    } else {
+                        this.scene.cameras.main.shake(currentHit === 3 ? 80 : 35, currentHit === 3 ? 0.004 : 0.0015);
+                    }
 
                     zombie.takeDamage(damage, knockbackDir, knockback, "MELEE");
                 }
